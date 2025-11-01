@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  # PostgreSQL 数据库
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: quicksilver-db
+    environment:
+      POSTGRES_DB: quicksilver
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pgdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - quicksilver-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 应用服务
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quicksilver-app
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=quicksilver
+      - DB_USER=postgres
+      - DB_PASSWORD=password
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - quicksilver-network
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  quicksilver-network:
+    driver: bridge

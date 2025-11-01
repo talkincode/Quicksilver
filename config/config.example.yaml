@@ -1,0 +1,46 @@
+# 配置文件示例
+# 复制此文件为 config.yaml 并修改相应配置
+
+server:
+  port: 8080
+  mode: debug  # debug, release
+  name: quicksilver
+  version: 1.0.0
+
+database:
+  host: localhost
+  port: 5432
+  name: quicksilver
+  user: postgres
+  password: password
+  sslmode: disable
+  max_idle_conns: 10
+  max_open_conns: 50
+  conn_max_lifetime: 3600  # 秒
+
+market:
+  update_interval: 1s  # 行情更新间隔
+  data_source: hyperliquid  # binance, hyperliquid
+  api_url: https://api.hyperliquid.xyz
+  symbols:
+    - BTC/USDT
+    - ETH/USDT
+  hyperliquid:
+    info_endpoint: /info  # Hyperliquid 信息端点
+    ws_endpoint: wss://api.hyperliquid.xyz/ws  # WebSocket 端点
+
+trading:
+  default_fee_rate: 0.001  # 0.1%
+  maker_fee_rate: 0.0005   # 0.05%
+  taker_fee_rate: 0.001    # 0.1%
+  min_order_amount: 0.00001  # 最小下单量
+
+auth:
+  jwt_secret: your-secret-key-change-in-production
+  token_expire: 86400  # 24小时
+
+logging:
+  level: debug  # debug, info, warn, error
+  format: json  # json, console
+  output: stdout  # stdout, file
+  file_path: logs/app.log
