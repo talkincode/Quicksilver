@@ -133,6 +133,8 @@ order_info = exchange.fetch_order(order['id'])
 
 ### 运行测试
 
+#### Go 单元测试
+
 ```bash
 # 运行所有测试
 make test
@@ -146,6 +148,33 @@ make test-integration
 # 查看覆盖率
 make test-coverage
 ```
+
+#### CCXT 兼容性测试 ⭐
+
+**推荐：使用 CCXT SDK 验证 API 完全兼容性**
+
+```bash
+# 方式 1: 一键运行（推荐）
+./scripts/run_ccxt_tests.sh
+
+# 方式 2: 使用 Makefile
+make test-ccxt         # Python 版本
+make test-ccxt-js      # Node.js 版本
+
+# 方式 3: 手动运行
+cd scripts
+python3 test_ccxt.py   # Python
+node test_ccxt.js      # Node.js
+```
+
+**CCXT 测试覆盖**:
+
+- ✅ 公开 API（行情、成交记录）
+- ✅ 私有 API（余额、订单、我的成交）
+- ✅ 数据格式验证（CCXT 标准字段）
+- ✅ 认证机制测试（API Key/Secret）
+
+> 📚 详细文档: [CCXT 测试快速入门](./docs/CCXT_QUICKSTART.md) | [完整测试指南](./docs/ccxt-testing.md)
 
 ### 代码规范
 

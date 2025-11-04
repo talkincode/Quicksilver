@@ -248,6 +248,10 @@ func TestGetBalance(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
+	// 模拟认证中间件设置的用户信息
+	c.Set("user_id", user.ID)
+	c.Set("user", user)
+
 	handler := GetBalance(db)
 	err := handler(c)
 
@@ -402,6 +406,10 @@ func TestGetOrders(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
+	// 模拟认证中间件设置的用户信息
+	c.Set("user_id", user.ID)
+	c.Set("user", user)
+
 	handler := GetOrders(db)
 	err := handler(c)
 
@@ -466,6 +474,10 @@ func TestGetOpenOrders(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/orders/open", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+
+	// 模拟认证中间件设置的用户信息
+	c.Set("user_id", user.ID)
+	c.Set("user", user)
 
 	handler := GetOpenOrders(db)
 	err := handler(c)
@@ -534,6 +546,10 @@ func TestGetMyTrades(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/myTrades", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+
+	// 模拟认证中间件设置的用户信息
+	c.Set("user_id", user1.ID)
+	c.Set("user", user1)
 
 	handler := GetMyTrades(db)
 	err := handler(c)

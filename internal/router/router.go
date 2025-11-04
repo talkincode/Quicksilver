@@ -7,6 +7,7 @@ import (
 
 	"github.com/talkincode/quicksilver/internal/api"
 	"github.com/talkincode/quicksilver/internal/config"
+	"github.com/talkincode/quicksilver/internal/middleware"
 )
 
 // SetupRoutes 设置路由
@@ -31,8 +32,7 @@ func SetupRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config, logger *zap.Logg
 
 	// 私有接口（需要认证）
 	private := v1.Group("")
-	// TODO: 添加认证中间件
-	// private.Use(middleware.Auth(cfg))
+	private.Use(middleware.Auth(db, cfg)) // ✅ 启用认证中间件
 	{
 		private.GET("/balance", api.GetBalance(db))
 		private.POST("/order", api.CreateOrder(db, cfg))

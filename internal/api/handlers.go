@@ -87,8 +87,13 @@ func GetTrades(db *gorm.DB) echo.HandlerFunc {
 // GetBalance 获取余额
 func GetBalance(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		// TODO: 从认证中间件获取 user_id
-		userID := uint(1) // 临时硬编码
+		// 从认证中间件获取 user_id
+		userID, ok := c.Get("user_id").(uint)
+		if !ok {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "user not authenticated",
+			})
+		}
 
 		var balances []model.Balance
 		if err := db.Where("user_id = ?", userID).Find(&balances).Error; err != nil {
@@ -140,8 +145,13 @@ func CancelOrder(db *gorm.DB) echo.HandlerFunc {
 // GetOrders 获取订单列表
 func GetOrders(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		// TODO: 从认证中间件获取 user_id
-		userID := uint(1)
+		// 从认证中间件获取 user_id
+		userID, ok := c.Get("user_id").(uint)
+		if !ok {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "user not authenticated",
+			})
+		}
 
 		var orders []model.Order
 		if err := db.Where("user_id = ?", userID).
@@ -160,7 +170,13 @@ func GetOrders(db *gorm.DB) echo.HandlerFunc {
 // GetOpenOrders 获取未完成订单
 func GetOpenOrders(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		userID := uint(1)
+		// 从认证中间件获取 user_id
+		userID, ok := c.Get("user_id").(uint)
+		if !ok {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "user not authenticated",
+			})
+		}
 
 		var orders []model.Order
 		if err := db.Where("user_id = ? AND status IN ?", userID, []string{"open", "partially_filled"}).
@@ -178,7 +194,13 @@ func GetOpenOrders(db *gorm.DB) echo.HandlerFunc {
 // GetMyTrades 获取我的成交记录
 func GetMyTrades(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		userID := uint(1)
+		// 从认证中间件获取 user_id
+		userID, ok := c.Get("user_id").(uint)
+		if !ok {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "user not authenticated",
+			})
+		}
 
 		var trades []model.Trade
 		if err := db.Where("user_id = ?", userID).

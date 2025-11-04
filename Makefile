@@ -57,6 +57,38 @@ test-coverage: test ## 生成测试覆盖率报告
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
+test-ccxt: ## 运行 CCXT 兼容性测试（Python）
+	@echo "Running CCXT compatibility tests (Python)..."
+	@cd scripts && python3 test_ccxt.py
+
+test-ccxt-js: ## 运行 CCXT 兼容性测试（Node.js）
+	@echo "Running CCXT compatibility tests (Node.js)..."
+	@cd scripts && node test_ccxt.js
+
+test-ccxt-setup-python: ## 安装 CCXT 测试依赖（Python）
+	@echo "Installing Python CCXT test dependencies..."
+	@cd scripts && pip3 install -r requirements-test.txt
+
+test-ccxt-setup-nodejs: ## 安装 CCXT 测试依赖（Node.js）
+	@echo "Installing Node.js CCXT test dependencies..."
+	@cd scripts && npm install
+
+test-api: ## 运行 REST API 自动化测试
+	@echo "Running REST API tests..."
+	@chmod +x scripts/api_test.sh
+	@./scripts/api_test.sh
+
+test-perf: ## 运行性能测试（需要 k6）
+	@echo "Running performance tests..."
+	@which k6 > /dev/null || (echo "Error: k6 not installed. Install: brew install k6" && exit 1)
+	k6 run scripts/performance_test.js
+
+test-perf-report: ## 运行性能测试并生成报告
+	@echo "Running performance tests with report..."
+	@which k6 > /dev/null || (echo "Error: k6 not installed. Install: brew install k6" && exit 1)
+	k6 run --out json=perf_results.json scripts/performance_test.js
+	@echo "Performance report saved to: perf_results.json"
+
 fmt: ## 格式化代码
 	@echo "Formatting code..."
 	$(GOFMT) ./...
