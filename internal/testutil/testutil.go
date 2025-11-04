@@ -35,6 +35,11 @@ func NewTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+// SetupTestDB 创建内存测试数据库（别名）
+func SetupTestDB(t *testing.T) *gorm.DB {
+	return NewTestDB(t)
+}
+
 // NewTestLogger 创建测试日志记录器
 func NewTestLogger() *zap.Logger {
 	logger, _ := zap.NewDevelopment()
@@ -87,6 +92,11 @@ func NewTestConfig() *config.Config {
 			Output: "stdout",
 		},
 	}
+}
+
+// LoadTestConfig 加载测试配置（别名）
+func LoadTestConfig(t *testing.T) *config.Config {
+	return NewTestConfig()
 }
 
 // CleanupDB 清理测试数据库
