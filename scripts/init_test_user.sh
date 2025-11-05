@@ -78,14 +78,15 @@ DELETE FROM orders WHERE user_id IN (SELECT id FROM users WHERE email = '$TEST_E
 DELETE FROM balances WHERE user_id IN (SELECT id FROM users WHERE email = '$TEST_EMAIL');
 DELETE FROM users WHERE email = '$TEST_EMAIL';
 
--- 创建测试用户
-INSERT INTO users (email, username, api_key, api_secret, status, created_at, updated_at)
+-- 创建测试用户（管理员权限）
+INSERT INTO users (email, username, api_key, api_secret, status, role, created_at, updated_at)
 VALUES (
     '$TEST_EMAIL',
     'test_user',
     '$API_KEY',
     '$API_SECRET',
     'active',
+    'admin',
     NOW(),
     NOW()
 ) RETURNING id;

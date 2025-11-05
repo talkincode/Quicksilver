@@ -12,6 +12,7 @@ type User struct {
 	APIKey    string     `gorm:"uniqueIndex;size:64;not null" json:"api_key"`
 	APISecret string     `gorm:"size:128;not null" json:"-"`
 	Status    string     `gorm:"size:20;default:active" json:"status"`
+	Role      string     `gorm:"size:20;default:user" json:"role"` // user/admin
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 	LastLogin *time.Time `json:"last_login,omitempty"`

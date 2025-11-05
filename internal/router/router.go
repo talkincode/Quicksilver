@@ -50,9 +50,9 @@ func SetupRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config, logger *zap.Logg
 	}
 
 	// 管理员接口（需要认证 + 管理员权限）
-	// TODO: 添加管理员权限验证中间件
 	admin := v1.Group("/admin")
-	admin.Use(middleware.Auth(db, cfg)) // 暂时使用普通认证，后续添加管理员验证
+	admin.Use(middleware.Auth(db, cfg)) // 先验证身份
+	admin.Use(middleware.AdminOnly())   // 再验证管理员权限
 	{
 		// 用户管理
 		admin.POST("/users", api.AdminCreateUser(userService))
