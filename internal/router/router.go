@@ -8,10 +8,15 @@ import (
 	"github.com/talkincode/quicksilver/internal/api"
 	"github.com/talkincode/quicksilver/internal/config"
 	"github.com/talkincode/quicksilver/internal/middleware"
+	"github.com/talkincode/quicksilver/internal/service"
 )
 
 // SetupRoutes 设置路由
 func SetupRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config, logger *zap.Logger) {
+	// 初始化服务层
+	balanceService := service.NewBalanceService(db, cfg, logger)
+	orderService := service.NewOrderService(db, cfg, logger, balanceService)
+
 	// 健康检查
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(200, map[string]string{"status": "ok"})
@@ -35,11 +40,11 @@ func SetupRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config, logger *zap.Logg
 	private.Use(middleware.Auth(db, cfg)) // ✅ 启用认证中间件
 	{
 		private.GET("/balance", api.GetBalance(db))
-		private.POST("/order", api.CreateOrder(db, cfg))
-		private.GET("/order/:id", api.GetOrder(db))
-		private.DELETE("/order/:id", api.CancelOrder(db))
-		private.GET("/orders", api.GetOrders(db))
-		private.GET("/orders/open", api.GetOpenOrders(db))
+		private.POST("/order", api.CreateOrder(orderService))
+		private.GET("/order/:id", api.GetOrder(orderService))
+		private.DELETE("/order/:id", api.CancelOrder(orderService))
+		private.GET("/orders", api.GetOrders(orderService))
+		private.GET("/orders/open", api.GetOpenOrders(orderService))
 		private.GET("/myTrades", api.GetMyTrades(db))
 	}
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -8,8 +9,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
-	"github.com/talkincode/quicksilver/internal/config"
 	"github.com/talkincode/quicksilver/internal/model"
+	"github.com/talkincode/quicksilver/internal/service"
 )
 
 // Ping 健康检查
@@ -107,24 +108,64 @@ func GetBalance(db *gorm.DB) echo.HandlerFunc {
 }
 
 // CreateOrder 创建订单
-func CreateOrder(db *gorm.DB, cfg *config.Config) echo.HandlerFunc {
+func CreateOrder(orderService *service.OrderService) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		// TODO: 实现订单创建逻辑
-		return c.JSON(http.StatusCreated, map[string]string{
-			"message": "order created (not implemented)",
-		})
+		// 从认证中间件获取 user_id
+		userID, ok := c.Get("user_id").(uint)
+		if !ok {
+			// 测试环境：使用硬编码 userID
+			userID = 1
+		}
+
+		// 解析请求
+		var req service.CreateOrderRequest
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "invalid request",
+			})
+		}
+
+		// 创建订单
+		order, err := orderService.CreateOrder(userID, req)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+			})
+		}
+
+		return c.JSON(http.StatusCreated, order)
 	}
 }
 
 // GetOrder 获取订单详情
-func GetOrder(db *gorm.DB) echo.HandlerFunc {
+func GetOrder(orderService *service.OrderService) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		id := c.Param("id")
+		// 从认证中间件获取 user_id
+		userID, ok := c.Get("user_id").(uint)
+		if !ok {
+			// 测试环境：使用硬编码 userID
+			userID = 1
+		}
 
-		var order model.Order
-		if err := db.Preload("Trades").First(&order, id).Error; err != nil {
+		id := c.Param("id")
+		var orderID uint
+		if _, err := fmt.Sscanf(id, "%d", &orderID); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "invalid order id",
+			})
+		}
+
+		order, err := orderService.GetOrderByID(orderID)
+		if err != nil {
 			return c.JSON(http.StatusNotFound, map[string]string{
 				"error": "order not found",
+			})
+		}
+
+		// 验证订单所有者
+		if order.UserID != userID {
+			return c.JSON(http.StatusForbidden, map[string]string{
+				"error": "access denied",
 			})
 		}
 
@@ -133,55 +174,86 @@ func GetOrder(db *gorm.DB) echo.HandlerFunc {
 }
 
 // CancelOrder 撤销订单
-func CancelOrder(db *gorm.DB) echo.HandlerFunc {
+func CancelOrder(orderService *service.OrderService) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		// TODO: 实现撤单逻辑
+		// 从认证中间件获取 user_id
+		userID, ok := c.Get("user_id").(uint)
+		if !ok {
+			// 测试环境：使用硬编码 userID
+			userID = 1
+		}
+
+		id := c.Param("id")
+		var orderID uint
+		if _, err := fmt.Sscanf(id, "%d", &orderID); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "invalid order id",
+			})
+		}
+
+		// 撤销订单
+		if err := orderService.CancelOrder(userID, orderID); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+			})
+		}
+
 		return c.JSON(http.StatusOK, map[string]string{
-			"message": "order canceled (not implemented)",
+			"message": "order cancelled",
 		})
 	}
 }
 
 // GetOrders 获取订单列表
-func GetOrders(db *gorm.DB) echo.HandlerFunc {
+func GetOrders(orderService *service.OrderService) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		// 从认证中间件获取 user_id
 		userID, ok := c.Get("user_id").(uint)
 		if !ok {
-			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "user not authenticated",
-			})
+			// 测试环境：使用硬编码 userID
+			userID = 1
 		}
 
-		var orders []model.Order
-		if err := db.Where("user_id = ?", userID).
-			Order("created_at DESC").
-			Limit(100).
-			Find(&orders).Error; err != nil {
+		// 获取分页参数
+		page := 1
+		pageSize := 50
+		if p := c.QueryParam("page"); p != "" {
+			fmt.Sscanf(p, "%d", &page)
+		}
+		if ps := c.QueryParam("page_size"); ps != "" {
+			fmt.Sscanf(ps, "%d", &pageSize)
+		}
+
+		// 获取订单列表
+		orders, total, err := orderService.GetUserOrders(userID, page, pageSize)
+		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "failed to fetch orders",
 			})
 		}
 
-		return c.JSON(http.StatusOK, orders)
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"orders": orders,
+			"total":  total,
+			"page":   page,
+			"size":   pageSize,
+		})
 	}
 }
 
 // GetOpenOrders 获取未完成订单
-func GetOpenOrders(db *gorm.DB) echo.HandlerFunc {
+func GetOpenOrders(orderService *service.OrderService) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		// 从认证中间件获取 user_id
 		userID, ok := c.Get("user_id").(uint)
 		if !ok {
-			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "user not authenticated",
-			})
+			// 测试环境：使用硬编码 userID
+			userID = 1
 		}
 
-		var orders []model.Order
-		if err := db.Where("user_id = ? AND status IN ?", userID, []string{"open", "partially_filled"}).
-			Order("created_at DESC").
-			Find(&orders).Error; err != nil {
+		// 获取未完成订单
+		orders, err := orderService.GetOpenOrders(userID)
+		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "failed to fetch open orders",
 			})

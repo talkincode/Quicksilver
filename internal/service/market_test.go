@@ -141,6 +141,9 @@ func TestUpdateTickersError(t *testing.T) {
 		service := NewMarketService(db, cfg, logger)
 		err := service.UpdateTickers()
 
+		// 等待异步 goroutine 完成
+		time.Sleep(100 * time.Millisecond)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported data source")
 	})
@@ -198,9 +201,13 @@ func TestMarketServiceIntegration(t *testing.T) {
 		err := service.UpdateTickers()
 		require.NoError(t, err)
 
+		// 等待异步 goroutine 完成（增加时间）
+		time.Sleep(500 * time.Millisecond)
+
 		// 验证所有交易对都已更新
 		var tickers []model.Ticker
-		db.Find(&tickers)
+		err = db.Find(&tickers).Error
+		require.NoError(t, err, "Should query tickers successfully")
 		assert.Equal(t, 3, len(tickers))
 
 		// 验证每个 ticker 的数据
@@ -242,4 +249,246 @@ func BenchmarkUpdateTickers(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		service.UpdateTickers()
 	}
+}
+
+// TestTriggerPendingOrdersMatching 测试价格更新后触发限价单撮合
+func TestTriggerPendingOrdersMatching(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	cfg := testutil.NewTestConfig()
+	logger := testutil.NewTestLogger()
+
+	t.Run("Trigger limit buy order when price drops", func(t *testing.T) {
+		// Given: 创建限价买单（价格低于市场价）
+		user := testutil.SeedUser(t, db)
+		testutil.SeedBalance(t, db, user.ID, "USDT", 10000.0, 5000.0)
+		testutil.SeedBalance(t, db, user.ID, "BTC", 0, 0)
+
+		// 创建初始行情（价格较高）
+		bidPrice := 50000.0
+		askPrice := 50100.0
+		ticker := &model.Ticker{
+			Symbol:    "BTC/USDT",
+			LastPrice: 50050.0,
+			BidPrice:  &bidPrice,
+			AskPrice:  &askPrice,
+		}
+		db.Save(ticker)
+
+		// 创建限价买单（限价 49500，低于当前价）
+		limitPrice := 49500.0
+		order := &model.Order{
+			UserID: user.ID,
+			Symbol: "BTC/USDT",
+			Side:   "buy",
+			Type:   "limit",
+			Price:  &limitPrice,
+			Amount: 0.1,
+			Status: "new",
+		}
+		db.Create(order)
+
+		// When: 价格下跌到 49000（低于限价）
+		newAskPrice := 49000.0
+		ticker.AskPrice = &newAskPrice
+		ticker.LastPrice = 49000.0
+		db.Save(ticker)
+
+		// 触发限价单撮合
+		service := NewMarketService(db, cfg, logger)
+		err := service.TriggerPendingOrdersMatching()
+		require.NoError(t, err)
+
+		// 等待异步撮合完成
+		time.Sleep(100 * time.Millisecond)
+
+		// Then: 订单应该成交
+		var updatedOrder model.Order
+		db.First(&updatedOrder, order.ID)
+		assert.Equal(t, "filled", updatedOrder.Status)
+		assert.Equal(t, 0.1, updatedOrder.Filled)
+
+		// 验证成交记录
+		var trade model.Trade
+		err = db.Where("order_id = ?", order.ID).First(&trade).Error
+		require.NoError(t, err)
+		assert.Equal(t, 49000.0, trade.Price)
+	})
+
+	t.Run("Do not trigger limit buy order when price is still high", func(t *testing.T) {
+		// Given: 创建限价买单
+		testutil.CleanupDB(t, db)
+		user := testutil.SeedUser(t, db)
+		testutil.SeedBalance(t, db, user.ID, "USDT", 10000.0, 5000.0)
+
+		askPrice := 50100.0
+		ticker := &model.Ticker{
+			Symbol:    "BTC/USDT",
+			LastPrice: 50050.0,
+			AskPrice:  &askPrice,
+		}
+		db.Save(ticker)
+
+		limitPrice := 49500.0
+		order := &model.Order{
+			UserID: user.ID,
+			Symbol: "BTC/USDT",
+			Side:   "buy",
+			Type:   "limit",
+			Price:  &limitPrice,
+			Amount: 0.1,
+			Status: "new",
+		}
+		db.Create(order)
+
+		// When: 价格仍然高于限价（50100 > 49500）
+		service := NewMarketService(db, cfg, logger)
+		err := service.TriggerPendingOrdersMatching()
+		require.NoError(t, err)
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Then: 订单应该保持未成交状态
+		var updatedOrder model.Order
+		db.First(&updatedOrder, order.ID)
+		assert.Equal(t, "new", updatedOrder.Status)
+		assert.Equal(t, 0.0, updatedOrder.Filled)
+	})
+
+	t.Run("Trigger limit sell order when price rises", func(t *testing.T) {
+		// Given: 创建限价卖单
+		testutil.CleanupDB(t, db)
+		user := testutil.SeedUser(t, db)
+		testutil.SeedBalance(t, db, user.ID, "BTC", 1.0, 0.1)
+		testutil.SeedBalance(t, db, user.ID, "USDT", 0, 0)
+
+		bidPrice := 49900.0
+		ticker := &model.Ticker{
+			Symbol:    "BTC/USDT",
+			LastPrice: 49950.0,
+			BidPrice:  &bidPrice,
+		}
+		db.Save(ticker)
+
+		// 限价卖单：限价 50500
+		limitPrice := 50500.0
+		order := &model.Order{
+			UserID: user.ID,
+			Symbol: "BTC/USDT",
+			Side:   "sell",
+			Type:   "limit",
+			Price:  &limitPrice,
+			Amount: 0.1,
+			Status: "new",
+		}
+		db.Create(order)
+
+		// When: 价格上涨到 51000（高于限价）
+		newBidPrice := 51000.0
+		ticker.BidPrice = &newBidPrice
+		ticker.LastPrice = 51000.0
+		db.Save(ticker)
+
+		service := NewMarketService(db, cfg, logger)
+		err := service.TriggerPendingOrdersMatching()
+		require.NoError(t, err)
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Then: 订单应该成交
+		var updatedOrder model.Order
+		db.First(&updatedOrder, order.ID)
+		assert.Equal(t, "filled", updatedOrder.Status)
+		assert.Equal(t, 0.1, updatedOrder.Filled)
+	})
+
+	t.Run("Only trigger limit orders, not market orders", func(t *testing.T) {
+		// Given: 创建市价单和限价单
+		testutil.CleanupDB(t, db)
+		user := testutil.SeedUser(t, db)
+		testutil.SeedBalance(t, db, user.ID, "USDT", 10000.0, 5000.0)
+
+		askPrice := 50000.0
+		ticker := &model.Ticker{
+			Symbol:   "BTC/USDT",
+			AskPrice: &askPrice,
+		}
+		db.Save(ticker)
+
+		// 创建一个市价单（状态为 new，不应该被触发）
+		marketOrder := &model.Order{
+			UserID: user.ID,
+			Symbol: "BTC/USDT",
+			Side:   "buy",
+			Type:   "market",
+			Amount: 0.1,
+			Status: "new",
+		}
+		db.Create(marketOrder)
+
+		// When: 触发撮合
+		service := NewMarketService(db, cfg, logger)
+		err := service.TriggerPendingOrdersMatching()
+		require.NoError(t, err)
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Then: 市价单不应该被触发（只触发限价单）
+		var updatedMarketOrder model.Order
+		db.First(&updatedMarketOrder, marketOrder.ID)
+		assert.Equal(t, "new", updatedMarketOrder.Status)
+	})
+}
+
+// TestUpdateTickersWithMatching 测试价格更新后自动触发撮合
+func TestUpdateTickersWithMatching(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	logger := testutil.NewTestLogger()
+
+	t.Run("Price update triggers pending orders matching", func(t *testing.T) {
+		// Given: 创建限价买单
+		user := testutil.SeedUser(t, db)
+		testutil.SeedBalance(t, db, user.ID, "USDT", 10000.0, 5000.0)
+		testutil.SeedBalance(t, db, user.ID, "BTC", 0, 0)
+
+		limitPrice := 49500.0
+		order := &model.Order{
+			UserID: user.ID,
+			Symbol: "BTC/USDT",
+			Side:   "buy",
+			Type:   "limit",
+			Price:  &limitPrice,
+			Amount: 0.1,
+			Status: "new",
+		}
+		db.Create(order)
+
+		// 创建模拟服务器（返回低价）
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			response := HyperliquidAllMidsResponse{
+				"BTC": "49000",
+			}
+			json.NewEncoder(w).Encode(response)
+		}))
+		defer server.Close()
+
+		cfg := testutil.NewTestConfig()
+		cfg.Market.APIURL = server.URL
+		cfg.Market.Symbols = []string{"BTC/USDT"}
+
+		// When: 更新行情
+		service := NewMarketService(db, cfg, logger)
+		err := service.UpdateTickers()
+		require.NoError(t, err)
+
+		// 等待异步撮合完成（增加时间）
+		time.Sleep(500 * time.Millisecond)
+
+		// Then: 订单应该自动成交
+		var updatedOrder model.Order
+		err = db.First(&updatedOrder, order.ID).Error
+		require.NoError(t, err, "Order should exist")
+
+		t.Logf("Order status: %s, filled: %.8f", updatedOrder.Status, updatedOrder.Filled)
+		assert.Equal(t, "filled", updatedOrder.Status)
+	})
 }

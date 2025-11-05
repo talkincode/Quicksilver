@@ -1,7 +1,9 @@
 package testutil
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -17,7 +19,9 @@ import (
 func NewTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	// 使用文件模式而非 :memory: 以支持多连接
+	// cache=shared 允许多个连接访问同一个内存数据库
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	require.NoError(t, err, "failed to create test database")
@@ -111,14 +115,17 @@ func CleanupDB(t *testing.T, db *gorm.DB) {
 	db.Exec("DELETE FROM users")
 }
 
-// CreateTestUser 创建测试用户
+// CreateTestUser 创建测试用户（每次生成唯一邮箱）
 func CreateTestUser(t *testing.T, db *gorm.DB) *model.User {
 	t.Helper()
 
+	// 使用时间戳确保邮箱唯一
+	timestamp := time.Now().UnixNano()
+
 	user := &model.User{
-		Email:     "test@example.com",
+		Email:     fmt.Sprintf("test%d@example.com", timestamp),
 		Username:  "testuser",
-		APIKey:    "test-api-key-123456",
+		APIKey:    fmt.Sprintf("test-api-key-%d", timestamp),
 		APISecret: "test-api-secret-123456",
 		Status:    "active",
 	}
@@ -188,14 +195,17 @@ func Float64Ptr(v float64) *float64 {
 	return &v
 }
 
-// SeedUser 创建种子用户（简化版）
+// SeedUser 创建种子用户（简化版，每次生成唯一邮箱）
 func SeedUser(t *testing.T, db *gorm.DB) *model.User {
 	t.Helper()
 
+	// 使用时间戳确保邮箱唯一
+	timestamp := time.Now().UnixNano()
+
 	user := &model.User{
-		Email:     "test@example.com",
+		Email:     fmt.Sprintf("test%d@example.com", timestamp),
 		Username:  "testuser",
-		APIKey:    "test-api-key",
+		APIKey:    fmt.Sprintf("test-api-key-%d", timestamp),
 		APISecret: "test-secret",
 		Status:    "active",
 	}
@@ -206,15 +216,20 @@ func SeedUser(t *testing.T, db *gorm.DB) *model.User {
 	return user
 }
 
-// SeedBalance 创建种子余额（简化版）
-func SeedBalance(t *testing.T, db *gorm.DB, userID uint, asset string, amount float64) *model.Balance {
+// SeedBalance 创建种子余额（支持 available 和 locked）
+func SeedBalance(t *testing.T, db *gorm.DB, userID uint, asset string, available float64, locked ...float64) *model.Balance {
 	t.Helper()
+
+	lockedAmount := 0.0
+	if len(locked) > 0 {
+		lockedAmount = locked[0]
+	}
 
 	balance := &model.Balance{
 		UserID:    userID,
 		Asset:     asset,
-		Available: amount,
-		Locked:    0,
+		Available: available,
+		Locked:    lockedAmount,
 	}
 
 	err := db.Create(balance).Error

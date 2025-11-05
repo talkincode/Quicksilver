@@ -50,6 +50,23 @@ func (s *BalanceService) GetAllBalances(userID uint) ([]model.Balance, error) {
 	return balances, nil
 }
 
+// CheckBalance 检查用户是否有足够的可用余额
+func (s *BalanceService) CheckBalance(userID uint, asset string, amount float64) error {
+	var balance model.Balance
+	if err := s.db.Where("user_id = ? AND asset = ?", userID, asset).First(&balance).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("balance not found for asset %s", asset)
+		}
+		return fmt.Errorf("failed to get balance: %w", err)
+	}
+
+	if balance.Available < amount {
+		return fmt.Errorf("insufficient balance: available %.8f, required %.8f", balance.Available, amount)
+	}
+
+	return nil
+}
+
 // FreezeBalance 冻结余额（从可用余额转到冻结余额）
 func (s *BalanceService) FreezeBalance(userID uint, asset string, amount float64) error {
 	// 1. 参数验证

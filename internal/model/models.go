@@ -32,23 +32,27 @@ type Balance struct {
 
 // Order 订单模型
 type Order struct {
-	ID            uint       `gorm:"primaryKey" json:"id"`
-	UserID        uint       `gorm:"not null;index" json:"user_id"`
-	Symbol        string     `gorm:"size:20;not null;index" json:"symbol"`
-	Side          string     `gorm:"size:4;not null" json:"side"`
-	Type          string     `gorm:"size:10;not null" json:"type"`
-	Status        string     `gorm:"size:20;not null;default:new" json:"status"`
-	Price         *float64   `gorm:"type:decimal(20,8)" json:"price,omitempty"`
-	Amount        float64    `gorm:"type:decimal(20,8);not null" json:"amount"`
-	Filled        float64    `gorm:"type:decimal(20,8);default:0" json:"filled"`
-	AveragePrice  *float64   `gorm:"type:decimal(20,8)" json:"average_price,omitempty"`
-	Fee           float64    `gorm:"type:decimal(20,8);default:0" json:"fee"`
-	FeeAsset      string     `gorm:"size:10" json:"fee_asset,omitempty"`
-	ClientOrderID string     `gorm:"size:64;index" json:"client_order_id,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	FilledAt      *time.Time `json:"filled_at,omitempty"`
-	CanceledAt    *time.Time `json:"canceled_at,omitempty"`
+	ID               uint       `gorm:"primaryKey" json:"id"`
+	UserID           uint       `gorm:"not null;index" json:"user_id"`
+	Symbol           string     `gorm:"size:20;not null;index" json:"symbol"`
+	Side             string     `gorm:"size:4;not null" json:"side"`
+	Type             string     `gorm:"size:10;not null;index:idx_status_type" json:"type"`               // market/limit/stop_loss/take_profit
+	Status           string     `gorm:"size:20;not null;default:new;index:idx_status_type" json:"status"` // new/open/filled/canceled/triggered
+	Price            *float64   `gorm:"type:decimal(20,8)" json:"price,omitempty"`
+	StopPrice        *float64   `gorm:"type:decimal(20,8)" json:"stop_price,omitempty"` // 止盈止损触发价格
+	TriggerCondition string     `gorm:"size:10" json:"trigger_condition,omitempty"`     // ">=" 或 "<="
+	Amount           float64    `gorm:"type:decimal(20,8);not null" json:"amount"`
+	Filled           float64    `gorm:"type:decimal(20,8);default:0" json:"filled"`
+	AveragePrice     *float64   `gorm:"type:decimal(20,8)" json:"average_price,omitempty"`
+	Fee              float64    `gorm:"type:decimal(20,8);default:0" json:"fee"`
+	FeeAsset         string     `gorm:"size:10" json:"fee_asset,omitempty"`
+	ClientOrderID    string     `gorm:"size:64;index" json:"client_order_id,omitempty"`
+	ParentOrderID    *uint      `gorm:"index" json:"parent_order_id,omitempty"` // 关联的父订单ID（用于止盈止损）
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	FilledAt         *time.Time `json:"filled_at,omitempty"`
+	CanceledAt       *time.Time `json:"canceled_at,omitempty"`
+	TriggeredAt      *time.Time `json:"triggered_at,omitempty"` // 止盈止损触发时间
 
 	User   *User   `gorm:"foreignKey:UserID" json:"-"`
 	Trades []Trade `gorm:"foreignKey:OrderID" json:"trades,omitempty"`

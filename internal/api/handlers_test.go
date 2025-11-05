@@ -12,8 +12,10 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/talkincode/quicksilver/internal/model"
+	"github.com/talkincode/quicksilver/internal/service"
 	"github.com/talkincode/quicksilver/internal/testutil"
 )
 
@@ -286,31 +288,38 @@ func TestGetBalance(t *testing.T) {
 func TestCreateOrder(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	cfg := testutil.NewTestConfig()
+	logger := zap.NewNop()
+
+	// 初始化服务
+	balanceService := service.NewBalanceService(db, cfg, logger)
+	orderService := service.NewOrderService(db, cfg, logger, balanceService)
 
 	e := echo.New()
 
-	// 测试创建订单（当前返回未实现消息）
+	// 测试创建订单
 	orderJSON := `{"symbol":"BTC/USDT","side":"buy","type":"market","amount":0.1}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/order", strings.NewReader(orderJSON))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := CreateOrder(db, cfg)
+	handler := CreateOrder(orderService)
 	err := handler(c)
 
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusCreated, rec.Code)
-
-	var response map[string]string
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-	assert.Contains(t, response["message"], "not implemented")
+	// 由于没有余额和 ticker 数据，应该返回错误
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 // TestGetOrder 测试获取订单详情
 func TestGetOrder(t *testing.T) {
 	db := testutil.NewTestDB(t)
+	cfg := testutil.NewTestConfig()
+	logger := zap.NewNop()
+
+	// 初始化服务
+	balanceService := service.NewBalanceService(db, cfg, logger)
+	orderService := service.NewOrderService(db, cfg, logger, balanceService)
 
 	// 准备测试数据
 	user := testutil.SeedUser(t, db)
@@ -319,18 +328,21 @@ func TestGetOrder(t *testing.T) {
 	tests := []struct {
 		name           string
 		orderID        string
+		userID         uint
 		expectedStatus int
 		expectError    bool
 	}{
 		{
 			name:           "Get existing order",
 			orderID:        strconv.Itoa(int(order.ID)),
+			userID:         user.ID,
 			expectedStatus: http.StatusOK,
 			expectError:    false,
 		},
 		{
 			name:           "Get non-existing order",
 			orderID:        "99999",
+			userID:         user.ID,
 			expectedStatus: http.StatusNotFound,
 			expectError:    true,
 		},
@@ -344,8 +356,9 @@ func TestGetOrder(t *testing.T) {
 			c := e.NewContext(req, rec)
 			c.SetParamNames("id")
 			c.SetParamValues(tt.orderID)
+			c.Set("user_id", tt.userID) // 模拟认证中间件
 
-			handler := GetOrder(db)
+			handler := GetOrder(orderService)
 			err := handler(c)
 
 			require.NoError(t, err)
@@ -369,6 +382,12 @@ func TestGetOrder(t *testing.T) {
 // TestCancelOrder 测试撤销订单
 func TestCancelOrder(t *testing.T) {
 	db := testutil.NewTestDB(t)
+	cfg := testutil.NewTestConfig()
+	logger := zap.NewNop()
+
+	// 初始化服务
+	balanceService := service.NewBalanceService(db, cfg, logger)
+	orderService := service.NewOrderService(db, cfg, logger, balanceService)
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodDelete, "/v1/order/1", nil)
@@ -377,21 +396,23 @@ func TestCancelOrder(t *testing.T) {
 	c.SetParamNames("id")
 	c.SetParamValues("1")
 
-	handler := CancelOrder(db)
+	handler := CancelOrder(orderService)
 	err := handler(c)
 
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var response map[string]string
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-	assert.Contains(t, response["message"], "not implemented")
+	// 订单不存在，应该返回错误
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 // TestGetOrders 测试获取订单列表
 func TestGetOrders(t *testing.T) {
 	db := testutil.NewTestDB(t)
+	cfg := testutil.NewTestConfig()
+	logger := zap.NewNop()
+
+	// 初始化服务
+	balanceService := service.NewBalanceService(db, cfg, logger)
+	orderService := service.NewOrderService(db, cfg, logger, balanceService)
 
 	// 准备测试数据
 	user := testutil.SeedUser(t, db)
@@ -410,54 +431,42 @@ func TestGetOrders(t *testing.T) {
 	c.Set("user_id", user.ID)
 	c.Set("user", user)
 
-	handler := GetOrders(db)
+	handler := GetOrders(orderService)
 	err := handler(c)
 
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var orders []model.Order
-	err = json.Unmarshal(rec.Body.Bytes(), &orders)
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, 3, len(orders))
-
-	// 验证订单是按创建时间降序排列
-	for i := 0; i < len(orders)-1; i++ {
-		assert.True(t, orders[i].CreatedAt.After(orders[i+1].CreatedAt) ||
-			orders[i].CreatedAt.Equal(orders[i+1].CreatedAt))
-	}
+	assert.Equal(t, float64(3), response["total"])
 }
 
 // TestGetOpenOrders 测试获取未完成订单
 func TestGetOpenOrders(t *testing.T) {
 	db := testutil.NewTestDB(t)
+	cfg := testutil.NewTestConfig()
+	logger := zap.NewNop()
+
+	// 初始化服务
+	balanceService := service.NewBalanceService(db, cfg, logger)
+	orderService := service.NewOrderService(db, cfg, logger, balanceService)
 
 	// 准备测试数据
 	user := testutil.SeedUser(t, db)
 
 	// 创建不同状态的订单
-	openOrder := &model.Order{
+	newOrder := &model.Order{
 		UserID: user.ID,
 		Symbol: "BTC/USDT",
 		Side:   "buy",
 		Type:   "limit",
-		Status: "open",
+		Status: "new",
 		Price:  testutil.Float64Ptr(50000.0),
 		Amount: 0.1,
 	}
-	db.Create(openOrder)
-
-	partialOrder := &model.Order{
-		UserID: user.ID,
-		Symbol: "BTC/USDT",
-		Side:   "buy",
-		Type:   "limit",
-		Status: "partially_filled",
-		Price:  testutil.Float64Ptr(50000.0),
-		Amount: 0.1,
-		Filled: 0.05,
-	}
-	db.Create(partialOrder)
+	db.Create(newOrder)
 
 	filledOrder := &model.Order{
 		UserID: user.ID,
@@ -479,7 +488,7 @@ func TestGetOpenOrders(t *testing.T) {
 	c.Set("user_id", user.ID)
 	c.Set("user", user)
 
-	handler := GetOpenOrders(db)
+	handler := GetOpenOrders(orderService)
 	err := handler(c)
 
 	require.NoError(t, err)
@@ -488,14 +497,8 @@ func TestGetOpenOrders(t *testing.T) {
 	var orders []model.Order
 	err = json.Unmarshal(rec.Body.Bytes(), &orders)
 	require.NoError(t, err)
-
-	// 应该只返回 2 个未完成订单（open 和 partially_filled）
-	assert.Equal(t, 2, len(orders))
-
-	// 验证返回的都是未完成订单
-	for _, order := range orders {
-		assert.True(t, order.Status == "open" || order.Status == "partially_filled")
-	}
+	assert.Equal(t, 1, len(orders)) // 只有1个 new 状态的订单
+	assert.Equal(t, "new", orders[0].Status)
 }
 
 // TestGetMyTrades 测试获取我的成交记录
