@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/talkincode/quicksilver/internal/config"

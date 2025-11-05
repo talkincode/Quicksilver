@@ -9,7 +9,11 @@
       "Bash(curl:*)",
       "Bash(kill:*)",
       "Bash(go test:*)",
-      "Bash(CGO_ENABLED=1 go test:*)"
+      "Bash(CGO_ENABLED=1 go test:*)",
+      "Bash(go build:*)",
+      "Bash(go vet:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(make:*)"
     ],
     "deny": [],
     "ask": []

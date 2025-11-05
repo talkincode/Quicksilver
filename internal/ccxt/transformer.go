@@ -8,6 +8,28 @@ import (
 	"github.com/talkincode/quicksilver/internal/model"
 )
 
+// TransformKline 将内部 Kline 模型转换为 CCXT 标准 OHLCV 格式
+// CCXT 格式: [timestamp, open, high, low, close, volume]
+func TransformKline(kline *model.Kline) []interface{} {
+	return []interface{}{
+		kline.OpenTime.UnixMilli(), // timestamp in milliseconds
+		kline.Open,                 // open price
+		kline.High,                 // high price
+		kline.Low,                  // low price
+		kline.Close,                // close price
+		kline.Volume,               // volume
+	}
+}
+
+// TransformKlines 批量转换K线数据
+func TransformKlines(klines []model.Kline) [][]interface{} {
+	result := make([][]interface{}, len(klines))
+	for i, kline := range klines {
+		result[i] = TransformKline(&kline)
+	}
+	return result
+}
+
 // TransformTicker 将内部 Ticker 模型转换为 CCXT 标准格式
 func TransformTicker(ticker *model.Ticker) map[string]interface{} {
 	result := map[string]interface{}{

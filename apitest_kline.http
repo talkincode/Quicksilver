@@ -1,0 +1,46 @@
+### K线数据 API 测试
+
+@baseUrl = http://localhost:8080
+@symbol = BTC/USDT
+
+### 1. 获取1小时K线数据（默认100条）
+GET {{baseUrl}}/v1/ohlcv/{{symbol}}?timeframe=1h
+Accept: application/json
+
+### 2. 获取5分钟K线数据（限制50条）
+GET {{baseUrl}}/v1/ohlcv/BTC-USDT?timeframe=5m&limit=50
+Accept: application/json
+
+### 3. 获取15分钟K线数据
+GET {{baseUrl}}/v1/ohlcv/{{symbol}}?timeframe=15m&limit=20
+Accept: application/json
+
+### 4. 获取1天K线数据
+GET {{baseUrl}}/v1/ohlcv/{{symbol}}?timeframe=1d&limit=30
+Accept: application/json
+
+### 5. 获取指定时间之后的K线数据
+# since 参数为 Unix 毫秒时间戳
+GET {{baseUrl}}/v1/ohlcv/{{symbol}}?timeframe=1h&since=1704096000000&limit=100
+Accept: application/json
+
+### 6. ETH K线数据
+GET {{baseUrl}}/v1/ohlcv/ETH-USDT?timeframe=1h&limit=50
+Accept: application/json
+
+### 7. 获取最大限制1000条数据
+GET {{baseUrl}}/v1/ohlcv/{{symbol}}?timeframe=1h&limit=1000
+Accept: application/json
+
+### 测试说明
+# timeframe 参数支持：1m, 5m, 15m, 1h, 4h, 1d
+# limit 参数：默认100，最大1000
+# since 参数：可选，Unix毫秒时间戳，用于获取指定时间之后的数据
+# 符号格式：支持 BTC/USDT 或 BTC-USDT
+#
+# CCXT 标准返回格式：
+# [
+#   [timestamp, open, high, low, close, volume],
+#   [timestamp, open, high, low, close, volume],
+#   ...
+# ]

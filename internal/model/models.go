@@ -94,6 +94,22 @@ type Ticker struct {
 	Source                string    `gorm:"size:20;default:binance" json:"source"`
 }
 
+// Kline K线/蜡烛图数据模型
+type Kline struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Symbol    string    `gorm:"size:20;not null;uniqueIndex:idx_symbol_interval_time" json:"symbol"`
+	Interval  string    `gorm:"size:10;not null;uniqueIndex:idx_symbol_interval_time" json:"interval"` // 1m, 5m, 15m, 1h, 4h, 1d
+	OpenTime  time.Time `gorm:"not null;uniqueIndex:idx_symbol_interval_time" json:"open_time"`
+	CloseTime time.Time `gorm:"not null" json:"close_time"`
+	Open      float64   `gorm:"type:decimal(20,8);not null" json:"open"`
+	High      float64   `gorm:"type:decimal(20,8);not null" json:"high"`
+	Low       float64   `gorm:"type:decimal(20,8);not null" json:"low"`
+	Close     float64   `gorm:"type:decimal(20,8);not null" json:"close"`
+	Volume    float64   `gorm:"type:decimal(20,8);not null;default:0" json:"volume"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // TableName 指定表名
 func (User) TableName() string {
 	return "users"
@@ -113,4 +129,8 @@ func (Trade) TableName() string {
 
 func (Ticker) TableName() string {
 	return "tickers"
+}
+
+func (Kline) TableName() string {
+	return "klines"
 }

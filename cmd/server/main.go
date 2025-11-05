@@ -56,6 +56,10 @@ func main() {
 	marketService := service.NewMarketService(db, cfg, logger)
 	marketService.StartAutoUpdate()
 
+	// 启动K线数据服务
+	klineService := service.NewKlineService(db, cfg, logger)
+	klineService.StartAutoUpdate()
+
 	// 创建 Echo 实例
 	e := echo.New()
 	e.HideBanner = true

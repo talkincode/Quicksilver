@@ -17,6 +17,7 @@ func SetupRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config, logger *zap.Logg
 	balanceService := service.NewBalanceService(db, cfg, logger)
 	orderService := service.NewOrderService(db, cfg, logger, balanceService)
 	userService := service.NewUserService(db, cfg, logger)
+	klineService := service.NewKlineService(db, cfg, logger)
 
 	// 健康检查
 	e.GET("/health", func(c echo.Context) error {
@@ -34,6 +35,7 @@ func SetupRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config, logger *zap.Logg
 		public.GET("/markets", api.GetMarkets(cfg))
 		public.GET("/ticker/:symbol", api.GetTicker(db))
 		public.GET("/trades/:symbol", api.GetTrades(db))
+		public.GET("/ohlcv/:symbol", api.GetOHLCV(klineService)) // K线数据
 	}
 
 	// 私有接口（需要认证）

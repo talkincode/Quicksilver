@@ -61,5 +61,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Order{},
 		&model.Trade{},
 		&model.Ticker{},
+		&model.Kline{},
 	)
 }

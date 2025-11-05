@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -86,6 +87,52 @@ func GetTrades(db *gorm.DB) echo.HandlerFunc {
 		}
 
 		return c.JSON(http.StatusOK, result)
+	}
+}
+
+// GetOHLCV 获取K线数据 (CCXT 标准接口)
+func GetOHLCV(klineService *service.KlineService) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		// 获取参数并转换格式: BTC-USDT -> BTC/USDT
+		symbol := c.Param("symbol")
+		symbol = strings.ReplaceAll(symbol, "-", "/")
+
+		// 获取时间周期，默认 1h
+		interval := c.QueryParam("timeframe")
+		if interval == "" {
+			interval = "1h"
+		}
+
+		// 获取数量限制，默认 100
+		limit := 100
+		if limitStr := c.QueryParam("limit"); limitStr != "" {
+			if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+				limit = parsedLimit
+				if limit > 1000 {
+					limit = 1000 // 最大1000
+				}
+			}
+		}
+
+		// 获取起始时间 (可选)
+		var since *time.Time
+		if sinceStr := c.QueryParam("since"); sinceStr != "" {
+			if timestamp, err := strconv.ParseInt(sinceStr, 10, 64); err == nil {
+				t := time.UnixMilli(timestamp)
+				since = &t
+			}
+		}
+
+		// 查询K线数据
+		klines, err := klineService.GetKlines(symbol, interval, limit, since)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": fmt.Sprintf("failed to fetch klines: %v", err),
+			})
+		}
+
+		// 转换为 CCXT 格式
+		return c.JSON(http.StatusOK, ccxt.TransformKlines(klines))
 	}
 }
 

@@ -10,6 +10,71 @@ import (
 	"github.com/talkincode/quicksilver/internal/model"
 )
 
+func TestTransformKline(t *testing.T) {
+	t.Run("Transform kline to CCXT OHLCV format", func(t *testing.T) {
+		openTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+		kline := &model.Kline{
+			Symbol:    "BTC/USDT",
+			Interval:  "1h",
+			OpenTime:  openTime,
+			CloseTime: openTime.Add(1 * time.Hour),
+			Open:      50000.0,
+			High:      51000.0,
+			Low:       49500.0,
+			Close:     50500.0,
+			Volume:    123.456,
+		}
+
+		result := TransformKline(kline)
+
+		require.Len(t, result, 6)
+		assert.Equal(t, openTime.UnixMilli(), result[0])
+		assert.Equal(t, 50000.0, result[1])
+		assert.Equal(t, 51000.0, result[2])
+		assert.Equal(t, 49500.0, result[3])
+		assert.Equal(t, 50500.0, result[4])
+		assert.Equal(t, 123.456, result[5])
+	})
+}
+
+func TestTransformKlines(t *testing.T) {
+	t.Run("Transform multiple klines", func(t *testing.T) {
+		openTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+		klines := []model.Kline{
+			{
+				Symbol:    "BTC/USDT",
+				Interval:  "1h",
+				OpenTime:  openTime,
+				CloseTime: openTime.Add(1 * time.Hour),
+				Open:      50000.0,
+				High:      51000.0,
+				Low:       49500.0,
+				Close:     50500.0,
+				Volume:    100.0,
+			},
+			{
+				Symbol:    "BTC/USDT",
+				Interval:  "1h",
+				OpenTime:  openTime.Add(1 * time.Hour),
+				CloseTime: openTime.Add(2 * time.Hour),
+				Open:      50500.0,
+				High:      52000.0,
+				Low:       50000.0,
+				Close:     51500.0,
+				Volume:    150.0,
+			},
+		}
+
+		result := TransformKlines(klines)
+
+		require.Len(t, result, 2)
+		assert.Equal(t, openTime.UnixMilli(), result[0][0])
+		assert.Equal(t, 50000.0, result[0][1])
+		assert.Equal(t, openTime.Add(1*time.Hour).UnixMilli(), result[1][0])
+		assert.Equal(t, 50500.0, result[1][1])
+	})
+}
+
 func TestTransformTicker(t *testing.T) {
 	t.Run("Transform ticker with all fields", func(t *testing.T) {
 		// Given: 一个完整的 Ticker 模型
