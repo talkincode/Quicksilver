@@ -24,7 +24,7 @@ def show_home_page(api):
             with col1:
                 st.metric("👥 用户总数", total_users)
             with col2:
-                st.metric("📈 交易对", "2", delta="BTC/USDT, ETH/USDT")
+                st.metric("📈 交易对", "2")
             with col3:
                 # 尝试获取订单统计
                 try:

@@ -37,7 +37,7 @@ def show_trades_page(api):
         if isinstance(trades, str):
             st.error(f"❌ API 返回错误: {trades}")
             return
-        
+
         if not trades or not isinstance(trades, list) or len(trades) == 0:
             st.info(f"📭 暂无 {symbol_filter} 的成交记录")
         else:

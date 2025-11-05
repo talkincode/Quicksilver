@@ -61,7 +61,7 @@ def show_orders_page(api):
         if isinstance(orders, str):
             st.error(f"❌ API 返回错误: {orders}")
             return
-        
+
         if not orders or not isinstance(orders, list) or len(orders) == 0:
             st.info("📭 暂无订单数据")
         else:
