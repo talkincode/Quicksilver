@@ -449,3 +449,231 @@ func TestHardDeleteUser(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TestListUsers 测试用户列表查询
+func TestListUsers(t *testing.T) {
+	t.Run("List all users with default pagination", func(t *testing.T) {
+		// Given: 创建 10 个测试用户
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		for i := 0; i < 10; i++ {
+			testutil.SeedUser(t, db)
+		}
+
+		// When: 查询第 1 页，每页 5 条
+		users, total, err := userService.ListUsers(1, 5, "", "")
+
+		// Then: 成功返回 5 个用户
+		require.NoError(t, err)
+		assert.Equal(t, int64(10), total, "Total should be 10")
+		assert.Len(t, users, 5, "Should return 5 users")
+
+		// And: 结果按创建时间倒序排列
+		for i := 0; i < len(users)-1; i++ {
+			assert.True(t, users[i].CreatedAt.After(users[i+1].CreatedAt) || users[i].CreatedAt.Equal(users[i+1].CreatedAt),
+				"Users should be ordered by created_at DESC")
+		}
+	})
+
+	t.Run("List users with custom page and limit", func(t *testing.T) {
+		// Given: 创建 15 个测试用户
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		for i := 0; i < 15; i++ {
+			testutil.SeedUser(t, db)
+		}
+
+		// When: 查询第 2 页，每页 10 条
+		users, total, err := userService.ListUsers(2, 10, "", "")
+
+		// Then: 返回剩余 5 个用户
+		require.NoError(t, err)
+		assert.Equal(t, int64(15), total)
+		assert.Len(t, users, 5, "Page 2 should have 5 remaining users")
+	})
+
+	t.Run("Search users by email", func(t *testing.T) {
+		// Given: 创建特定邮箱的用户
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		// 创建包含 "alice" 的用户
+		user1, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "alice@example.com",
+		})
+		require.NoError(t, err)
+
+		user2, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "alice.smith@test.com",
+		})
+		require.NoError(t, err)
+
+		// 创建不匹配的用户
+		_, _, err = userService.CreateUser(CreateUserRequest{
+			Email: "bob@example.com",
+		})
+		require.NoError(t, err)
+
+		// When: 搜索 "alice"
+		users, total, err := userService.ListUsers(1, 10, "alice", "")
+
+		// Then: 只返回包含 "alice" 的用户
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), total)
+		assert.Len(t, users, 2)
+
+		// And: 验证返回的是正确的用户
+		emails := []string{users[0].Email, users[1].Email}
+		assert.Contains(t, emails, user1.Email)
+		assert.Contains(t, emails, user2.Email)
+	})
+
+	t.Run("Filter users by status", func(t *testing.T) {
+		// Given: 创建不同状态的用户
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		// 创建 active 用户
+		activeUser1, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "active1@example.com",
+		})
+		require.NoError(t, err)
+
+		activeUser2, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "active2@example.com",
+		})
+		require.NoError(t, err)
+
+		// 创建 inactive 用户
+		inactiveUser, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "inactive@example.com",
+		})
+		require.NoError(t, err)
+		_, err = userService.UpdateUserStatus(inactiveUser.ID, "inactive")
+		require.NoError(t, err)
+
+		// When: 只查询 active 用户
+		users, total, err := userService.ListUsers(1, 10, "", "active")
+
+		// Then: 只返回 active 用户
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), total)
+		assert.Len(t, users, 2)
+
+		// And: 所有返回的用户状态都是 active
+		for _, user := range users {
+			assert.Equal(t, "active", user.Status)
+		}
+
+		// And: 验证是正确的用户
+		userIDs := []uint{users[0].ID, users[1].ID}
+		assert.Contains(t, userIDs, activeUser1.ID)
+		assert.Contains(t, userIDs, activeUser2.ID)
+	})
+
+	t.Run("Search and filter combined", func(t *testing.T) {
+		// Given: 创建混合条件的用户
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		// active + test
+		user1, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "test1@example.com",
+		})
+		require.NoError(t, err)
+
+		// inactive + test
+		user2, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "test2@example.com",
+		})
+		require.NoError(t, err)
+		_, err = userService.UpdateUserStatus(user2.ID, "inactive")
+		require.NoError(t, err)
+
+		// active + other
+		_, _, err = userService.CreateUser(CreateUserRequest{
+			Email: "other@example.com",
+		})
+		require.NoError(t, err)
+
+		// When: 搜索 "test" 且状态为 "active"
+		users, total, err := userService.ListUsers(1, 10, "test", "active")
+
+		// Then: 只返回符合两个条件的用户
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), total)
+		assert.Len(t, users, 1)
+		assert.Equal(t, user1.ID, users[0].ID)
+		assert.Equal(t, "active", users[0].Status)
+		assert.Contains(t, users[0].Email, "test")
+	})
+
+	t.Run("Empty result when no users match", func(t *testing.T) {
+		// Given: 数据库中没有用户
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		// When: 查询用户
+		users, total, err := userService.ListUsers(1, 10, "", "")
+
+		// Then: 返回空列表
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), total)
+		assert.Empty(t, users)
+	})
+
+	t.Run("Search with no matches", func(t *testing.T) {
+		// Given: 存在用户但不匹配搜索条件
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		_, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "user@example.com",
+		})
+		require.NoError(t, err)
+
+		// When: 搜索不存在的关键字
+		users, total, err := userService.ListUsers(1, 10, "nonexistent", "")
+
+		// Then: 返回空结果
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), total)
+		assert.Empty(t, users)
+	})
+
+	t.Run("Pagination edge cases", func(t *testing.T) {
+		// Given: 创建恰好一页的用户
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		for i := 0; i < 5; i++ {
+			testutil.SeedUser(t, db)
+		}
+
+		// When: 请求第 2 页
+		users, total, err := userService.ListUsers(2, 5, "", "")
+
+		// Then: 返回空结果
+		require.NoError(t, err)
+		assert.Equal(t, int64(5), total)
+		assert.Empty(t, users, "Page 2 should be empty when exactly one page exists")
+	})
+}

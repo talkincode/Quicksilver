@@ -1,192 +1,269 @@
-# 开发计划 - CCXT 兼容与质量提升 (Week 45, 2025)
+# 开发计划 - 测试完善与仪表盘优化 (Week 45, 2025)
 
-> **计划制定时间**: 2025-11-05  
-> **计划执行周期**: 本周 (Week 45: 11 月 4 日 - 11 月 10 日)  
-> **下次评审时间**: 周五 17:00
-
----
-
-## 📊 项目状态
-
-**当前进度**: 85% 完成  
-**测试覆盖率**: 75.2% (核心业务逻辑，超过 70%阈值 ✅)  
-**关键阻塞**: 无 ✅  
-**本周已完成**:
-
-- ✅ **质量改进工具链**: GolangCI-Lint 配置、覆盖率检查、GitHub Actions CI/CD
-- ✅ **并发测试套件**: 余额并发操作测试（SQLite 兼容）
-- ✅ **性能基准测试**: 6 个关键操作的 Benchmark
-- ✅ **代码质量修复**: 修复 errcheck、goconst 等 linter 警告
-- ✅ **测试覆盖率提升**: 从 60% → 75.2%
+> **计划制定时间**: 2025-11-05 (更新)  
+> **计划执行周期**: 本周 (Week 45: 11 月 5 日 - 11 月 11 日)  
+> **下次评审时间**: 2025-11-11 17:00  
+> **规划依据**: `.github/prompts/planner.prompt.md`
 
 ---
 
-## 🎯 本周目标
+## 📊 项目状态诊断
+
+**当前进度**: 97% 完成 ✅  
+**测试覆盖率**: 58.8% (目标: 70%，差距: 11.2%) ⚠️  
+**关键阻塞**: 无阻塞性问题 ✅  
+**编译状态**: 通过 ✅  
+**代码质量**: 通过 go vet, go fmt ✅
+
+**本周已完成** (2025-11-05):
+
+- ✅ **修复测试失败**: TestAdminDeleteUser 通过
+- ✅ **实现软删除**: DeleteUser 改为状态更新，保留历史数据
+- ✅ **新增测试**: TestDeleteUser (3 个), TestHardDeleteUser (2 个)
+- ✅ **覆盖率提升**: 57.7% → 58.8% ⬆️ 1.1%
+- ✅ **代码质量报告**: 生成 QUALITY_ANALYSIS_REPORT.md
+
+**待解决问题**:
+
+- ⚠️ Service 层覆盖率 68.5% (低于 80% 要求)
+- ⚠️ Config 层覆盖率 6.7% (严重不足)
+- ⚠️ ListUsers 函数 0% 覆盖率
+- ⚠️ Streamlit 仪表盘 80% 完成 (差 20%)
+
+---
+
+## 🎯 本周目标 (SMART 原则)
 
 ### 主要里程碑
 
-1. **实现 CCXT 格式转换层** - 让项目可与 CCXT 客户端无缝集成
-2. **编写端到端集成测试** - 验证完整交易流程
-3. **优化代码质量** - 消除剩余技术债务
+1. **Specific (具体)**: 提升测试覆盖率至 70%+，补充 ListUsers 和 Config 层测试
+2. **Measurable (可衡量)**: 覆盖率从 58.8% → 72%+，Service 层 68.5% → 80%+
+3. **Achievable (可实现)**: 预估 7.5 小时工作量，本周可完成
+4. **Relevant (相关)**: 满足项目质量标准，为生产部署做准备
+5. **Time-bound (有时限)**: 2025-11-11 前完成
 
 ### 成功指标
 
-- **CCXT 兼容性**: 可使用 CCXT Python/JavaScript 客户端完成完整交易流程
-- **端到端测试**: 覆盖从登录 → 查询余额 → 创建订单 → 撤单的完整流程
-- **代码质量**: GolangCI-Lint 检查通过率 > 95%
-- **API 响应时间**: P99 < 100ms (首次性能测试)
+| 指标             | 当前值 | 目标值   | 差距     |
+| ---------------- | ------ | -------- | -------- |
+| 整体覆盖率       | 58.8%  | **72%+** | ⬆️ 13.2% |
+| Service 层       | 68.5%  | **80%+** | ⬆️ 11.5% |
+| Config 层        | 6.7%   | **70%+** | ⬆️ 63.3% |
+| ListUsers 覆盖率 | 0%     | **80%+** | ⬆️ 80%   |
+| Streamlit 仪表盘 | 80%    | **100%** | ⬆️ 20%   |
+| 测试通过率       | 100%   | **100%** | ✅ 保持  |
 
 ---
 
-## 📝 任务列表
+## 📝 任务列表 (优先级排序)
 
 ### P0 - 必须完成 (阻塞性)
 
-#### 任务 #1: 实现 CCXT 响应格式转换层
-
-**优先级**: P0 (MVP 核心功能)
-
-**目标**: 将内部数据格式转换为符合 CCXT 标准的 JSON 格式，实现与 CCXT 客户端的无缝对接
-
-**价值**:
-
-- 兼容主流量化交易框架 (CCXT 支持 100+ 交易所)
-- 用户可使用熟悉的 CCXT API 进行交易
-- 验证 API 设计的正确性和完整性
-
-**验收标准**:
-
-- [x] Ticker 格式转换 (timestamp, datetime, high, low, bid, ask, last, volume)
-- [x] Order 格式转换 (id, clientOrderId, symbol, type, side, price, amount, filled, remaining, status, fee)
-- [x] Trade 格式转换 (id, timestamp, symbol, side, price, amount, cost, fee)
-- [x] Balance 格式转换 (free, used, total)
-- [x] 所有转换函数有单元测试
-- [x] 转换层测试覆盖率 ≥ 90%
-
-**预估时间**: 4 小时
-
-**技术要点**:
-
-- 创建独立的 `internal/ccxt/` 包
-- 定义转换接口: `TransformTicker()`, `TransformOrder()`, `TransformTrade()`, `TransformBalance()`
-- 时间格式转换: `time.Time` → Unix 毫秒时间戳 + ISO8601 字符串
-- 数值精度: 使用 `%.8f` 格式化浮点数
-- 费用结构: `{"cost": 0.001, "currency": "USDT", "rate": 0.001}`
-
-**前置依赖**: 无 ✅
-
-**执行步骤**:
-
-1. [x] 创建 `internal/ccxt/transformer.go` - 30 分钟
-   - 定义 CCXT 标准数据结构
-   - 实现 Ticker 转换函数
-2. [x] 创建 `internal/ccxt/transformer_test.go` - 1 小时
-   - Ticker 转换测试
-   - Order 转换测试
-   - Trade 转换测试
-   - Balance 转换测试
-3. [x] 集成到 API Handlers - 1 小时
-   - 修改 `GetTicker`, `GetOrder`, `GetBalance`, `GetTrades`
-   - 使用转换函数替换现有格式化代码
-4. [x] 运行测试和验证 - 30 分钟
-   - `make test`
-   - 手动 API 测试
-5. [x] 文档更新 - 30 分钟
-   - 更新 API 文档
-   - 添加 CCXT 使用示例
+✅ **无 P0 阻塞性问题** - 所有核心功能已实现且测试通过
 
 ---
 
-#### 任务 #2: 编写 CCXT 客户端集成测试
+### P1 - 高优先级 (本周内完成)
 
-**优先级**: P0 (验证核心功能)
+#### 任务 #1: 补充 ListUsers 测试用例
 
-**目标**: 使用真实的 CCXT Python 客户端进行端到端测试，验证 API 完全兼容
+**优先级**: P1  
+**预估**: 1 小时  
+**状态**: ⏳ 待开始
+
+**目标**: 为 `UserService.ListUsers()` 补充完整测试用例，覆盖率从 0% 提升至 80%+
 
 **价值**:
 
-- 验证 API 格式转换的正确性
-- 确保与 CCXT 生态系统的兼容性
-- 提供用户使用示例
+- 消除 Service 层最大的测试缺口
+- 验证分页、搜索、过滤逻辑正确性
+- 提升整体覆盖率约 2-3%
 
 **验收标准**:
 
-- [x] 编写 Python 测试脚本 (`scripts/test_ccxt_integration.py`)
-- [x] 测试覆盖以下场景:
-  - [x] 连接到 Quicksilver API
-  - [x] 查询市场信息 (`fetchMarkets()`)
-  - [x] 查询行情 (`fetchTicker()`)
-  - [x] 查询余额 (`fetchBalance()`)
-  - [x] 创建市价买单 (`createMarketBuyOrder()`)
-  - [x] 创建限价卖单 (`createLimitSellOrder()`)
-  - [x] 查询订单 (`fetchOrder()`)
-  - [x] 撤销订单 (`cancelOrder()`)
-  - [x] 查询成交记录 (`fetchMyTrades()`)
-- [x] 所有测试用例通过 ✅
-
-**预估时间**: 3 小时
+- [ ] TestListUsers 包含至少 5 个子测试
+- [ ] 覆盖分页场景 (page, limit)
+- [ ] 覆盖搜索场景 (email 关键字)
+- [ ] 覆盖状态过滤 (active, inactive, suspended)
+- [ ] 覆盖空结果和边界条件
+- [ ] ListUsers 覆盖率 ≥ 80%
 
 **技术要点**:
 
-- 使用 CCXT 的自定义交易所功能
-- 配置 API 端点: `http://localhost:8080/v1`
-- 使用测试用户的 API Key/Secret
-- 捕获和验证错误响应
-
-**前置依赖**: 任务 #1 (CCXT 格式转换)
+- 使用 `testutil.SeedUser` 创建测试数据
+- 验证分页参数计算正确 (offset, limit)
+- 验证总数统计准确
+- 验证结果排序 (默认按创建时间倒序)
 
 **执行步骤**:
 
-1. [x] 环境准备 - 30 分钟
-   - 安装 CCXT: `pip install ccxt`
-   - 创建测试脚本骨架
-2. [x] 实现测试用例 - 1.5 小时
-   - 连接测试
-   - 市场数据查询测试
-   - 余额查询测试
-   - 订单操作测试
-3. [x] 运行并修复问题 - 1 小时
-   - 执行测试脚本
-   - 根据错误修复 API 格式
-   - 重新测试直到全部通过
+1. [ ] 编写测试用例 - TDD 红阶段 (20 分钟)
+2. [ ] 实现或修复 ListUsers 逻辑 (如需要) (20 分钟)
+3. [ ] 运行测试验证通过 (10 分钟)
+4. [ ] 检查覆盖率报告 (10 分钟)
 
----
-
-### P1 - 高优先级 (本周内)
-
-#### 任务 #3: 优化 GetMarkets 从配置读取交易对列表
-
-**优先级**: P1 (技术债务消除)
-
-**目标**: 将硬编码的交易对列表改为从配置文件动态读取
-
-**价值**:
-
-- 提高系统灵活性
-- 避免每次修改交易对都要改代码
-- 符合配置驱动的设计原则
-
-**验收标准**:
-
-- [x] `GetMarkets()` 从 `config.Market.Symbols` 读取
-- [x] 支持动态添加/删除交易对
-- [x] API 测试更新并通过
-
-**预估时间**: 30 分钟
-
-**技术要点**:
+**测试用例模板**:
 
 ```go
-// 修改前 (硬编码)
-symbols := []string{"BTC/USDT", "ETH/USDT"}
+func TestListUsers(t *testing.T) {
+    t.Run("List all users with default pagination", func(t *testing.T) {
+        // Given: 创建 10 个测试用户
+        // When: 调用 ListUsers(page=1, limit=5)
+        // Then: 返回 5 个用户，total=10
+    })
 
-// 修改后 (配置驱动)
-symbols := cfg.Market.Symbols
+    t.Run("Search users by email", func(t *testing.T) {
+        // Given: 用户邮箱包含 "test"
+        // When: ListUsers(search="test")
+        // Then: 只返回匹配的用户
+    })
+
+    t.Run("Filter users by status", func(t *testing.T) {
+        // Given: 部分用户状态为 inactive
+        // When: ListUsers(status="active")
+        // Then: 只返回 active 用户
+    })
+}
 ```
 
-**前置依赖**: 无
+---
+
+#### 任务 #2: 补充 Config 层测试
+
+**优先级**: P1  
+**预估**: 1.5 小时  
+**状态**: ⏳ 待开始
+
+**目标**: Config 层覆盖率从 6.7% 提升至 70%+
+
+**价值**:
+
+- 验证配置加载和验证逻辑健壮性
+- 防止配置错误导致生产环境故障
+- 提升整体覆盖率约 3-5%
+
+**验收标准**:
+
+- [ ] 测试 YAML 配置文件加载
+- [ ] 测试环境变量覆盖机制
+- [ ] 测试配置验证规则
+- [ ] 测试缺失配置的默认值
+- [ ] 测试无效配置的错误处理
+- [ ] Config 层覆盖率 ≥ 70%
+
+**技术要点**:
+
+- 使用临时文件测试配置加载
+- 使用 `t.Setenv()` 测试环境变量
+- 验证 Viper 自动环境变量映射 (QS_SERVER_PORT)
+- 测试 `GetDSN()` 等辅助方法
 
 **执行步骤**:
+
+1. [ ] 分析当前 Config 代码结构 (15 分钟)
+2. [ ] 编写配置加载测试 (30 分钟)
+3. [ ] 编写环境变量测试 (20 分钟)
+4. [ ] 编写验证和错误处理测试 (20 分钟)
+5. [ ] 运行测试并验证覆盖率 (15 分钟)
+
+**测试用例模板**:
+
+```go
+func TestLoadConfig(t *testing.T) {
+    t.Run("Load valid config file", ...)
+    t.Run("Load config with env override", ...)
+    t.Run("Return error on missing file", ...)
+    t.Run("Return error on invalid YAML", ...)
+}
+
+func TestConfigValidation(t *testing.T) {
+    t.Run("Validate database config", ...)
+    t.Run("Validate server config", ...)
+    t.Run("Default values when missing", ...)
+}
+```
+
+---
+
+#### 任务 #3: 完善 Streamlit 仪表盘
+
+**优先级**: P1  
+**预估**: 2 小时  
+**状态**: ⏳ 待开始
+
+**目标**: 完成 Streamlit 仪表盘剩余 20% 功能，达到生产可用状态
+
+**价值**:
+
+- 提供完整的管理工具
+- 可视化监控系统状态
+- 简化运维操作
+
+**验收标准**:
+
+- [ ] 余额管理模块实现 (查询、充值、提现)
+- [ ] 系统监控模块实现 (API 状态、数据库连接)
+- [ ] UI 样式优化 (统一主题、响应式布局)
+- [ ] 错误处理完善 (友好的错误提示)
+- [ ] 所有功能通过手动测试
+
+**技术要点**:
+
+- 使用 `dashboard/api/client.py` 封装 API 调用
+- Streamlit 组件: `st.metric()`, `st.dataframe()`, `st.form()`
+- 实时刷新: `st.rerun()` 或定时器
+- 异常处理: try-except 包装 API 调用
+
+**执行步骤**:
+
+1. [ ] 实现余额管理页面 (45 分钟)
+2. [ ] 实现系统监控页面 (30 分钟)
+3. [ ] UI 样式优化 (30 分钟)
+4. [ ] 测试和调试 (15 分钟)
+
+---
+
+### P2 - 中优先级 (本月内)
+
+#### 任务 #4: 运行 CCXT 客户端集成测试
+
+**优先级**: P2  
+**预估**: 1 小时  
+**状态**: 📅 计划中
+
+**目标**: 使用 CCXT Python 客户端验证 API 兼容性
+
+**价值**: 验证 CCXT 标准兼容性，发现潜在的格式问题
+
+**验收标准**:
+
+- [ ] 运行 `scripts/test_ccxt_client.py`
+- [ ] 所有测试用例通过
+- [ ] 文档记录测试结果
+
+---
+
+#### 任务 #5: 添加管理员权限中间件
+
+**优先级**: P2  
+**预估**: 1.5 小时  
+**状态**: 📅 计划中
+
+**目标**: 为管理员 API 添加权限验证，防止普通用户越权访问
+
+**验收标准**:
+
+- [ ] 实现 AdminAuth 中间件
+- [ ] User 模型添加 role 字段
+- [ ] 测试覆盖率 ≥ 80%
+
+---
+
+### P3 - 低优先级 (待定)
+
+#### 任务 #6: 实现 Binance API 集成 (TODO)
+
+#### 任务 #7: 添加 API 速率限制 (TODO)
 
 1. [x] 修改 `internal/api/handlers.go:35` - 10 分钟
 2. [x] 更新单元测试 - 10 分钟

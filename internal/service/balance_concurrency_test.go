@@ -13,11 +13,12 @@ import (
 
 // TestFreezeBalanceConcurrency 测试并发冻结余额的竞态条件
 func TestFreezeBalanceConcurrency(t *testing.T) {
-	db := testutil.SetupTestDB(t)
-	cfg := testutil.LoadTestConfig(t)
-	logger := testutil.NewTestLogger()
-
 	t.Run("Concurrent freeze operations with race protection", func(t *testing.T) {
+		// Given: 独立数据库实例
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+
 		// Given: 用户有 1000 USDT
 		user := testutil.SeedUser(t, db)
 		testutil.SeedBalance(t, db, user.ID, "USDT", 1000.0, 0)
@@ -65,7 +66,10 @@ func TestFreezeBalanceConcurrency(t *testing.T) {
 	})
 
 	t.Run("Concurrent freeze and unfreeze operations", func(t *testing.T) {
-		testutil.CleanupDB(t, db)
+		// Given: 独立数据库实例
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
 
 		// Given: 用户有 1000 USDT
 		user := testutil.SeedUser(t, db)
@@ -101,7 +105,10 @@ func TestFreezeBalanceConcurrency(t *testing.T) {
 	})
 
 	t.Run("Concurrent transfer operations", func(t *testing.T) {
-		testutil.CleanupDB(t, db)
+		// Given: 独立数据库实例
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
 
 		// Given: 两个用户各有 500 USDT
 		user1 := testutil.SeedUser(t, db)
@@ -146,11 +153,12 @@ func TestFreezeBalanceConcurrency(t *testing.T) {
 
 // TestDeadlockPrevention 测试死锁预防
 func TestDeadlockPrevention(t *testing.T) {
-	db := testutil.SetupTestDB(t)
-	cfg := testutil.LoadTestConfig(t)
-	logger := testutil.NewTestLogger()
-
 	t.Run("No deadlock in circular operations", func(t *testing.T) {
+		// Given: 独立数据库实例
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+
 		// Given: 三个用户各有 1000 USDT
 		users := make([]*model.User, 3)
 		for i := 0; i < 3; i++ {

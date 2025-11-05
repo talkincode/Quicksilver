@@ -19,9 +19,9 @@ import (
 func NewTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	// 使用文件模式而非 :memory: 以支持多连接
-	// cache=shared 允许多个连接访问同一个内存数据库
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
+	// 使用纯内存模式 :memory: 为每个测试创建独立数据库
+	// 每次调用 SetupTestDB 都会创建全新的数据库实例，确保测试隔离
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	require.NoError(t, err, "failed to create test database")
