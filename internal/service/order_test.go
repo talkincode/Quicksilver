@@ -529,6 +529,134 @@ func TestCancelOrder(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cannot cancel")
 	})
+
+	t.Run("Cannot cancel order of another user", func(t *testing.T) {
+		db := setupTestDB(t)
+		cfg := setupTestConfig(t)
+		logger := zap.NewNop()
+
+		balanceService := NewBalanceService(db, cfg, logger)
+		orderService := NewOrderService(db, cfg, logger, balanceService)
+
+		user1 := createTestUser(t, db)
+		user2 := createTestUser(t, db)
+
+		// user1 创建订单
+		order := &model.Order{
+			UserID: user1.ID,
+			Symbol: "BTC/USDT",
+			Side:   "buy",
+			Type:   "limit",
+			Amount: 0.1,
+			Status: "new",
+		}
+		price := 50000.0
+		order.Price = &price
+		err := db.Create(order).Error
+		require.NoError(t, err)
+
+		// user2 尝试撤销 user1 的订单
+		err = orderService.CancelOrder(user2.ID, order.ID)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not belong to user")
+	})
+
+	t.Run("Cancel market sell order", func(t *testing.T) {
+		db := setupTestDB(t)
+		cfg := setupTestConfig(t)
+		logger := zap.NewNop()
+
+		balanceService := NewBalanceService(db, cfg, logger)
+		orderService := NewOrderService(db, cfg, logger, balanceService)
+
+		user := createTestUser(t, db)
+		createTestBalance(t, db, user.ID, "BTC", 1.0, 0.1) // 0.1 BTC 已冻结
+
+		// 创建卖单
+		order := &model.Order{
+			UserID: user.ID,
+			Symbol: "BTC/USDT",
+			Side:   "sell",
+			Type:   "market",
+			Amount: 0.1,
+			Status: "new",
+		}
+		err := db.Create(order).Error
+		require.NoError(t, err)
+
+		// 撤销订单
+		err = orderService.CancelOrder(user.ID, order.ID)
+
+		require.NoError(t, err)
+
+		// 验证 BTC 被解冻
+		var balance model.Balance
+		err = db.Where("user_id = ? AND asset = ?", user.ID, "BTC").First(&balance).Error
+		require.NoError(t, err)
+		assert.Equal(t, 0.0, balance.Locked)
+		assert.Equal(t, 1.1, balance.Available) // 1.0 + 0.1
+	})
+
+	t.Run("Cancel non-existent order", func(t *testing.T) {
+		db := setupTestDB(t)
+		cfg := setupTestConfig(t)
+		logger := zap.NewNop()
+
+		balanceService := NewBalanceService(db, cfg, logger)
+		orderService := NewOrderService(db, cfg, logger, balanceService)
+
+		user := createTestUser(t, db)
+
+		// 尝试撤销不存在的订单
+		err := orderService.CancelOrder(user.ID, 99999)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("Cancel market buy order with ticker price", func(t *testing.T) {
+		db := setupTestDB(t)
+		cfg := setupTestConfig(t)
+		logger := zap.NewNop()
+
+		balanceService := NewBalanceService(db, cfg, logger)
+		orderService := NewOrderService(db, cfg, logger, balanceService)
+
+		user := createTestUser(t, db)
+		createTestBalance(t, db, user.ID, "USDT", 10000.0, 5000.0)
+
+		// 创建行情数据
+		ticker := &model.Ticker{
+			Symbol:    "BTC/USDT",
+			LastPrice: 50000.0,
+		}
+		err := db.Save(ticker).Error
+		require.NoError(t, err)
+
+		// 创建市价买单
+		order := &model.Order{
+			UserID: user.ID,
+			Symbol: "BTC/USDT",
+			Side:   "buy",
+			Type:   "market",
+			Amount: 0.1,
+			Status: "new",
+		}
+		err = db.Create(order).Error
+		require.NoError(t, err)
+
+		// 撤销订单（应该按当前行情计算冻结金额）
+		err = orderService.CancelOrder(user.ID, order.ID)
+
+		require.NoError(t, err)
+
+		// 验证订单状态
+		var updated model.Order
+		err = db.First(&updated, order.ID).Error
+		require.NoError(t, err)
+		assert.Equal(t, "cancelled", updated.Status)
+	})
 }
 
 // TestGetUserOrders 测试获取用户订单列表
