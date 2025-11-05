@@ -86,7 +86,7 @@ func (s *OrderService) CreateOrder(userID uint, req CreateOrderRequest) (*model.
 
 	if err := s.db.Create(order).Error; err != nil {
 		// 创建失败，解冻资金
-		s.balanceService.UnfreezeBalance(userID, frozenAsset, frozenAmount)
+		_ = s.balanceService.UnfreezeBalance(userID, frozenAsset, frozenAmount)
 		s.logger.Error("Failed to create order",
 			zap.Uint("user_id", userID),
 			zap.String("symbol", req.Symbol),
@@ -379,7 +379,7 @@ func (s *OrderService) CreateStopLossOrder(userID uint, symbol, side string, amo
 
 	if err := s.db.Create(order).Error; err != nil {
 		// 回滚冻结
-		s.balanceService.UnfreezeBalance(userID, asset, frozenAmount)
+		_ = s.balanceService.UnfreezeBalance(userID, asset, frozenAmount)
 		return nil, fmt.Errorf("failed to create stop loss order: %w", err)
 	}
 
@@ -452,7 +452,7 @@ func (s *OrderService) CreateTakeProfitOrder(userID uint, symbol, side string, a
 	}
 
 	if err := s.db.Create(order).Error; err != nil {
-		s.balanceService.UnfreezeBalance(userID, asset, frozenAmount)
+		_ = s.balanceService.UnfreezeBalance(userID, asset, frozenAmount)
 		return nil, fmt.Errorf("failed to create take profit order: %w", err)
 	}
 

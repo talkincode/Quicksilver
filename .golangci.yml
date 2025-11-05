@@ -1,0 +1,86 @@
+# GolangCI-Lint 配置
+# 项目: Quicksilver - CCXT 兼容的模拟加密货币交易所
+# 最后更新: 2025-11-05
+
+run:
+  timeout: 5m
+  tests: true
+  skip-dirs:
+    - vendor
+    - bin
+    - scripts
+    - testutil # 排除测试工具包
+  skip-files:
+    - ".*_test.go$" # 排除测试文件本身
+
+linters:
+  enable:
+    - errcheck # 检查未处理的错误
+    - gofmt # 代码格式化
+    - goimports # 导入排序
+    - govet # 静态分析
+    - ineffassign # 检测无效赋值
+    - staticcheck # 高级静态检查
+    - unused # 未使用代码
+    - gosec # 安全检查
+    - gocyclo # 圈复杂度
+    - dupl # 重复代码
+    - misspell # 拼写检查
+    - unconvert # 不必要的类型转换
+    - goconst # 可以提取为常量的字符串
+    - revive # Go 代码规范检查
+
+  disable:
+    - typecheck # 避免与 gopls 冲突
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15 # 最大圈复杂度
+
+  errcheck:
+    check-blank: true # 检查 _ = err 的情况
+    check-type-assertions: true
+
+  gosec:
+    excludes:
+      - G404 # 随机数生成器（测试中可以使用弱随机）
+
+  govet:
+    check-shadowing: true
+
+  revive:
+    rules:
+      - name: exported
+        arguments:
+          - "checkPrivateReceivers"
+          - "sayRepetitiveInsteadOfStutters"
+
+  goimports:
+    local-prefixes: github.com/talkincode/quicksilver
+
+  dupl:
+    threshold: 100 # 重复代码行数阈值
+
+issues:
+  exclude-rules:
+    # 测试文件中允许的规则
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - dupl
+        - gosec
+        - errcheck
+
+    # 允许在 main.go 中使用 os.Exit
+    - path: cmd/server/main\.go
+      linters:
+        - gocritic
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  sort-results: true

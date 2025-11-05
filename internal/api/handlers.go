@@ -218,10 +218,10 @@ func GetOrders(orderService *service.OrderService) echo.HandlerFunc {
 		page := 1
 		pageSize := 50
 		if p := c.QueryParam("page"); p != "" {
-			fmt.Sscanf(p, "%d", &page)
+			_, _ = fmt.Sscanf(p, "%d", &page)
 		}
 		if ps := c.QueryParam("page_size"); ps != "" {
-			fmt.Sscanf(ps, "%d", &pageSize)
+			_, _ = fmt.Sscanf(ps, "%d", &pageSize)
 		}
 
 		// 获取订单列表

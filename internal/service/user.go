@@ -2,7 +2,7 @@ package service
 
 import (
 	"crypto/rand"
-	"encoding/hex"
+	"encoding/base64"
 	"fmt"
 	"regexp"
 
@@ -52,7 +52,10 @@ func (s *UserService) CreateUser(req CreateUserRequest) (*model.User, error) {
 	}
 
 	// 3. 生成 API 凭证
-	apiKey, apiSecret := generateAPICredentials()
+	apiKey, apiSecret, err := s.generateAPICredentials()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate API credentials: %w", err)
+	}
 
 	// 4. 创建用户
 	user := &model.User{
@@ -113,7 +116,10 @@ func (s *UserService) RegenerateAPIKey(userID uint) (*model.User, error) {
 	}
 
 	// 2. 生成新的凭证
-	apiKey, apiSecret := generateAPICredentials()
+	apiKey, apiSecret, err := s.generateAPICredentials()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate API credentials: %w", err)
+	}
 
 	// 3. 更新用户
 	user.APIKey = apiKey
@@ -173,18 +179,22 @@ func (s *UserService) UpdateUserStatus(userID uint, status string) (*model.User,
 }
 
 // generateAPICredentials 生成 API Key 和 Secret
-func generateAPICredentials() (apiKey string, apiSecret string) {
-	// API Key: 32 字节 = 64 hex 字符
+func (s *UserService) generateAPICredentials() (string, string, error) {
+	// 生成 API Key (32字节，base64编码)
 	apiKeyBytes := make([]byte, 32)
-	rand.Read(apiKeyBytes)
-	apiKey = hex.EncodeToString(apiKeyBytes)
+	if _, err := rand.Read(apiKeyBytes); err != nil {
+		return "", "", fmt.Errorf("failed to generate API key: %w", err)
+	}
+	apiKey := base64.URLEncoding.EncodeToString(apiKeyBytes)
 
-	// API Secret: 48 字节 = 96 hex 字符
+	// 生成 API Secret (48字节，base64编码)
 	apiSecretBytes := make([]byte, 48)
-	rand.Read(apiSecretBytes)
-	apiSecret = hex.EncodeToString(apiSecretBytes)
+	if _, err := rand.Read(apiSecretBytes); err != nil {
+		return "", "", fmt.Errorf("failed to generate API secret: %w", err)
+	}
+	apiSecret := base64.URLEncoding.EncodeToString(apiSecretBytes)
 
-	return apiKey, apiSecret
+	return apiKey, apiSecret, nil
 }
 
 // isValidEmail 验证邮箱格式

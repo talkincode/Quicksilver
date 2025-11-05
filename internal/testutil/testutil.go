@@ -46,7 +46,10 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 
 // NewTestLogger 创建测试日志记录器
 func NewTestLogger() *zap.Logger {
-	logger, _ := zap.NewDevelopment()
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		panic(fmt.Sprintf("failed to create test logger: %v", err))
+	}
 	return logger
 }
 

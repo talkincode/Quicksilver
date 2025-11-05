@@ -301,10 +301,17 @@ func TestUpdateUserStatus(t *testing.T) {
 }
 
 func TestGenerateAPICredentials(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cfg := testutil.LoadTestConfig(t)
+	logger := testutil.NewTestLogger()
+	service := NewUserService(db, cfg, logger)
+
 	t.Run("Generate unique credentials", func(t *testing.T) {
 		// When: 生成多组凭证
-		apiKey1, apiSecret1 := generateAPICredentials()
-		apiKey2, apiSecret2 := generateAPICredentials()
+		apiKey1, apiSecret1, err1 := service.generateAPICredentials()
+		require.NoError(t, err1)
+		apiKey2, apiSecret2, err2 := service.generateAPICredentials()
+		require.NoError(t, err2)
 
 		// Then: 应该是唯一的
 		assert.NotEqual(t, apiKey1, apiKey2, "API Keys should be unique")

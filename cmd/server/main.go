@@ -32,7 +32,9 @@ func main() {
 		fmt.Printf("Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync() // 忽略错误（标准输出无法 sync）
+	}()
 
 	logger.Info("Starting Quicksilver",
 		zap.String("version", cfg.Server.Version),

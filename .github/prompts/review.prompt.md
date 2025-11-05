@@ -1,7 +1,7 @@
 ---
 mode: "agent"
 model: Claude Sonnet 4.5
-tools: ['search', 'azure/search', 'usages', 'problems', 'changes', 'githubRepo', 'todos']
+tools: ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'azure/search', 'executePrompt', 'usages', 'vscodeAPI', 'think', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo', 'extensions', 'todos', 'runTests']
 description: "项目代码质量自动检测与分析"
 ---
 

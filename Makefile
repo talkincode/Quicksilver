@@ -93,10 +93,21 @@ fmt: ## 格式化代码
 	@echo "Formatting code..."
 	$(GOFMT) ./...
 
-lint: ## 代码检查
+lint: lint-install ## 代码检查
 	@echo "Running linter..."
-	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
-	golangci-lint run ./...
+	@golangci-lint run --config .golangci.yml ./...
+	@echo "✅ Linter passed"
+
+.PHONY: lint-install
+lint-install: ## 安装 golangci-lint
+	@which golangci-lint > /dev/null || \
+		(echo "Installing golangci-lint..." && \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
+
+.PHONY: lint-fix
+lint-fix: lint-install ## 自动修复代码规范问题
+	@echo "Running linter with auto-fix..."
+	@golangci-lint run --config .golangci.yml --fix ./...
 
 tidy: ## 整理依赖
 	@echo "Tidying modules..."
@@ -176,3 +187,48 @@ dev: ## 开发模式（热重载）
 
 .PHONY: all
 all: clean fmt lint test build ## 执行完整构建流程
+
+# ==================== 质量检查目标 ====================
+
+.PHONY: quality-check
+quality-check: fmt-check vet lint test-coverage-check race ## 执行完整质量检查流程
+	@echo ""
+	@echo "=========================================="
+	@echo "  ✅ All Quality Checks Passed!"
+	@echo "=========================================="
+
+.PHONY: vet
+vet: ## 运行 go vet 静态分析
+	@echo "Running go vet..."
+	@go vet ./...
+	@echo "✅ go vet passed"
+
+.PHONY: race
+race: ## 运行竞态检测
+	@echo "Running race detector..."
+	@CGO_ENABLED=1 $(GOTEST) -race -short ./...
+	@echo "✅ Race detector passed"
+
+.PHONY: fmt-check
+fmt-check: ## 检查代码格式
+	@echo "Checking code format..."
+	@diff=$$(gofmt -l . 2>&1 | grep -v vendor || true); \
+	if [ -n "$$diff" ]; then \
+		echo "❌ Files not formatted:"; \
+		echo "$$diff"; \
+		echo ""; \
+		echo "Run 'make fmt' to fix formatting"; \
+		exit 1; \
+	fi
+	@echo "✅ Code format check passed"
+
+.PHONY: test-coverage-check
+test-coverage-check: test ## 运行测试并检查覆盖率阈值
+	@echo "Checking coverage threshold..."
+	@chmod +x scripts/check_coverage.sh
+	@./scripts/check_coverage.sh coverage.out 70
+
+.PHONY: bench
+bench: ## 运行性能基准测试
+	@echo "Running benchmarks..."
+	@CGO_ENABLED=1 $(GOTEST) -bench=. -benchmem ./...
