@@ -240,3 +240,56 @@ class QuicksilverAPI:
     def get_balance(self) -> Dict[str, Any]:
         """获取账户余额"""
         return self._request("GET", "/v1/balance")
+
+    def get_user_balances(self, user_id: int) -> List[Dict[str, Any]]:
+        """
+        获取指定用户的所有余额
+
+        Args:
+            user_id: 用户 ID
+
+        Returns:
+            余额列表
+        """
+        # 注意：这是管理员 API，需要后端实现
+        return self._request("GET", f"/v1/admin/users/{user_id}/balances")
+
+    def get_all_balances(self, page: int = 1, limit: int = 50) -> Dict[str, Any]:
+        """
+        获取所有用户的余额汇总
+
+        Args:
+            page: 页码
+            limit: 每页数量
+
+        Returns:
+            余额汇总数据
+        """
+        params = {"page": page, "limit": limit}
+        return self._request("GET", "/v1/admin/balances", params=params)
+
+    def adjust_balance(
+        self, user_id: int, asset: str, amount: float, operation: str, note: str = ""
+    ) -> Dict[str, Any]:
+        """
+        调整用户余额（管理员操作）
+
+        Args:
+            user_id: 用户 ID
+            asset: 资产类型（如 USDT, BTC）
+            amount: 金额（正数）
+            operation: 操作类型（add/deduct）
+            note: 备注说明
+
+        Returns:
+            操作结果
+        """
+        json = {
+            "asset": asset,
+            "amount": amount,
+            "operation": operation,
+            "note": note,
+        }
+        return self._request(
+            "POST", f"/v1/admin/users/{user_id}/balance/adjust", json=json
+        )

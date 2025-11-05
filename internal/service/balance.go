@@ -315,3 +315,71 @@ func (s *BalanceService) TransferBalance(fromUserID, toUserID uint, asset string
 		return nil
 	})
 }
+
+// GetAllBalancesPaginated 获取所有用户余额（分页）
+func (s *BalanceService) GetAllBalancesPaginated(page, limit int) ([]model.Balance, int64, error) {
+	var balances []model.Balance
+	var total int64
+
+	// 计算偏移量
+	offset := (page - 1) * limit
+
+	// 统计总数
+	if err := s.db.Model(&model.Balance{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count balances: %w", err)
+	}
+
+	// 查询分页数据
+	if err := s.db.Offset(offset).Limit(limit).Order("user_id, asset").Find(&balances).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to get balances: %w", err)
+	}
+
+	return balances, total, nil
+}
+
+// DeductBalanceFromAvailable 从可用余额中直接扣除（管理员操作）
+func (s *BalanceService) DeductBalanceFromAvailable(userID uint, asset string, amount float64) (*model.Balance, error) {
+	if amount <= 0 {
+		return nil, fmt.Errorf("amount must be positive")
+	}
+
+	var balance model.Balance
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// 锁定并获取余额
+		if err := tx.Where("user_id = ? AND asset = ?", userID, asset).
+			Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&balance).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return fmt.Errorf("balance not found")
+			}
+			return fmt.Errorf("failed to get balance: %w", err)
+		}
+
+		// 检查可用余额是否足够
+		if balance.Available < amount {
+			return fmt.Errorf("insufficient balance: available %.8f, required %.8f", balance.Available, amount)
+		}
+
+		// 扣除可用余额
+		balance.Available -= amount
+
+		if err := tx.Save(&balance).Error; err != nil {
+			return fmt.Errorf("failed to deduct balance: %w", err)
+		}
+
+		s.logger.Info("Balance deducted from available (admin)",
+			zap.Uint("user_id", userID),
+			zap.String("asset", asset),
+			zap.Float64("amount", amount),
+		)
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &balance, nil
+}

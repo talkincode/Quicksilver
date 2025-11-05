@@ -54,10 +54,16 @@ func SetupRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config, logger *zap.Logg
 	admin := v1.Group("/admin")
 	admin.Use(middleware.Auth(db, cfg)) // 暂时使用普通认证，后续添加管理员验证
 	{
+		// 用户管理
 		admin.POST("/users", api.AdminCreateUser(userService))
 		admin.GET("/users", api.AdminListUsers(userService))
 		admin.GET("/users/:id", api.AdminGetUser(userService))
 		admin.PUT("/users/:id", api.AdminUpdateUser(userService))
 		admin.DELETE("/users/:id", api.AdminDeleteUser(userService))
+
+		// 余额管理
+		admin.GET("/users/:id/balances", api.AdminGetUserBalances(balanceService))
+		admin.GET("/balances", api.AdminGetAllBalances(balanceService))
+		admin.POST("/users/:id/balance/adjust", api.AdminAdjustBalance(balanceService))
 	}
 }

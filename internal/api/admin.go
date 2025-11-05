@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v4"
+	"github.com/talkincode/quicksilver/internal/model"
 	"github.com/talkincode/quicksilver/internal/service"
 )
 
@@ -169,7 +170,7 @@ func AdminUpdateUser(userService *service.UserService) echo.HandlerFunc {
 	}
 }
 
-// AdminDeleteUser 删除用户 (软删除，设置为 inactive) (管理员接口)
+// AdminDeleteUser 删除用户 (彻底删除所有相关数据) (管理员接口)
 func AdminDeleteUser(userService *service.UserService) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		// 解析用户 ID
@@ -180,15 +181,150 @@ func AdminDeleteUser(userService *service.UserService) echo.HandlerFunc {
 			})
 		}
 
-		// 软删除：设置状态为 inactive
-		if _, err := userService.UpdateUserStatus(uint(id), "inactive"); err != nil {
+		// 彻底删除用户及其所有相关数据
+		if err := userService.DeleteUser(uint(id)); err != nil {
+			if err.Error() == "user not found" {
+				return c.JSON(http.StatusNotFound, map[string]string{
+					"error": "user not found",
+				})
+			}
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "failed to delete user",
 			})
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{
-			"message": "user deleted successfully",
+			"message": "user and all related data deleted successfully",
+		})
+	}
+}
+
+// AdminGetUserBalances 获取指定用户的所有余额 (管理员接口)
+func AdminGetUserBalances(balanceService *service.BalanceService) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		// 解析用户 ID
+		id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "invalid user id",
+			})
+		}
+
+		// 获取用户所有余额
+		balances, err := balanceService.GetAllBalances(uint(id))
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "failed to fetch balances",
+			})
+		}
+
+		return c.JSON(http.StatusOK, balances)
+	}
+}
+
+// AdminGetAllBalances 获取所有用户的余额汇总 (管理员接口)
+func AdminGetAllBalances(balanceService *service.BalanceService) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		// 解析分页参数
+		page, _ := strconv.Atoi(c.QueryParam("page"))
+		if page < 1 {
+			page = 1
+		}
+
+		limit, _ := strconv.Atoi(c.QueryParam("limit"))
+		if limit < 1 || limit > 1000 {
+			limit = 50
+		}
+
+		// 获取所有余额
+		balances, total, err := balanceService.GetAllBalancesPaginated(page, limit)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "failed to fetch balances",
+			})
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"data":  balances,
+			"total": total,
+			"page":  page,
+			"limit": limit,
+		})
+	}
+}
+
+// AdminAdjustBalance 调整用户余额 (管理员接口)
+func AdminAdjustBalance(balanceService *service.BalanceService) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		// 解析用户 ID
+		id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "invalid user id",
+			})
+		}
+
+		var req struct {
+			Asset     string  `json:"asset"`
+			Amount    float64 `json:"amount"`
+			Operation string  `json:"operation"` // add 或 deduct
+			Note      string  `json:"note"`
+		}
+
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "invalid request body",
+			})
+		}
+
+		// 参数验证
+		if req.Asset == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "asset is required",
+			})
+		}
+
+		if req.Amount <= 0 {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "amount must be positive",
+			})
+		}
+
+		if req.Operation != "add" && req.Operation != "deduct" {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "operation must be 'add' or 'deduct'",
+			})
+		}
+
+		if req.Note == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "note is required for audit",
+			})
+		}
+
+		// 执行余额调整
+		var balance *model.Balance
+		if req.Operation == "add" {
+			err = balanceService.AddBalance(uint(id), req.Asset, req.Amount)
+			if err == nil {
+				// 获取更新后的余额
+				balance, err = balanceService.GetBalance(uint(id), req.Asset)
+			}
+		} else {
+			// 扣除余额（从 available 中扣除）
+			balance, err = balanceService.DeductBalanceFromAvailable(uint(id), req.Asset, req.Amount)
+		}
+
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": err.Error(),
+			})
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"message": "balance adjusted successfully",
+			"balance": balance,
+			"note":    req.Note,
 		})
 	}
 }

@@ -80,3 +80,14 @@ def show_home_page(api):
 
         st.markdown("---")
         st.write("待添加更多分析图表...")
+
+
+def main() -> None:
+    api = st.session_state.get("api")
+    if api is None:
+        st.error("API 客户端未初始化")
+        return
+    show_home_page(api)
+
+
+main()

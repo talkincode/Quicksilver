@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Volumes/ExtDISK/github/Quicksilver/dashboard/start.sh:*)",
+      "Bash(bash:*)",
+      "Bash(PYTHONPATH=/Volumes/ExtDISK/github/Quicksilver/dashboard python -m streamlit run:*)",
+      "Bash(go run:*)",
+      "Bash(lsof:*)",
+      "Bash(curl:*)",
+      "Bash(kill:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

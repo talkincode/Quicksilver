@@ -228,6 +228,55 @@ func (s *UserService) generateAPICredentials() (string, string, error) {
 	return apiKey, apiSecret, nil
 }
 
+// DeleteUser 彻底删除用户及其所有相关数据
+func (s *UserService) DeleteUser(userID uint) error {
+	// 开始数据库事务
+	tx := s.db.Begin()
+	if tx.Error != nil {
+		return fmt.Errorf("failed to begin transaction: %w", tx.Error)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 1. 删除用户的交易记录
+	if err := tx.Where("user_id = ?", userID).Delete(&model.Trade{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete user trades: %w", err)
+	}
+
+	// 2. 删除用户的订单
+	if err := tx.Where("user_id = ?", userID).Delete(&model.Order{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete user orders: %w", err)
+	}
+
+	// 3. 删除用户的余额
+	if err := tx.Where("user_id = ?", userID).Delete(&model.Balance{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete user balances: %w", err)
+	}
+
+	// 4. 删除用户本身
+	if err := tx.Delete(&model.User{}, userID).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	s.logger.Info("User and all related data deleted successfully",
+		zap.Uint("user_id", userID),
+	)
+
+	return nil
+}
+
 // isValidEmail 验证邮箱格式
 func isValidEmail(email string) bool {
 	// 简单的邮箱正则验证
