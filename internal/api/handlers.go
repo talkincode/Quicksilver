@@ -9,6 +9,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
+	"github.com/talkincode/quicksilver/internal/ccxt"
+	"github.com/talkincode/quicksilver/internal/config"
 	"github.com/talkincode/quicksilver/internal/model"
 	"github.com/talkincode/quicksilver/internal/service"
 )
@@ -30,17 +32,12 @@ func ServerTime(c echo.Context) error {
 }
 
 // GetMarkets 获取交易对信息
-func GetMarkets(db *gorm.DB) echo.HandlerFunc {
+func GetMarkets(cfg *config.Config) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		// TODO: 实现获取交易对列表逻辑
-		markets := []map[string]interface{}{
-			{
-				"symbol":     "BTC/USDT",
-				"base":       "BTC",
-				"quote":      "USDT",
-				"active":     true,
-				"min_amount": 0.00001,
-			},
+		// 从配置读取交易对列表
+		markets := make([]map[string]interface{}, 0, len(cfg.Market.Symbols))
+		for _, symbol := range cfg.Market.Symbols {
+			markets = append(markets, ccxt.TransformMarket(symbol, cfg.Trading.MinOrderAmount))
 		}
 		return c.JSON(http.StatusOK, markets)
 	}
@@ -60,7 +57,8 @@ func GetTicker(db *gorm.DB) echo.HandlerFunc {
 			})
 		}
 
-		return c.JSON(http.StatusOK, ticker)
+		// 转换为 CCXT 格式
+		return c.JSON(http.StatusOK, ccxt.TransformTicker(&ticker))
 	}
 }
 
@@ -81,7 +79,13 @@ func GetTrades(db *gorm.DB) echo.HandlerFunc {
 			})
 		}
 
-		return c.JSON(http.StatusOK, trades)
+		// 转换为 CCXT 格式
+		result := make([]map[string]interface{}, len(trades))
+		for i, trade := range trades {
+			result[i] = ccxt.TransformTrade(&trade)
+		}
+
+		return c.JSON(http.StatusOK, result)
 	}
 }
 
@@ -103,7 +107,14 @@ func GetBalance(db *gorm.DB) echo.HandlerFunc {
 			})
 		}
 
-		return c.JSON(http.StatusOK, balances)
+		// 转换为指针切片
+		balancePtrs := make([]*model.Balance, len(balances))
+		for i := range balances {
+			balancePtrs[i] = &balances[i]
+		}
+
+		// 转换为 CCXT 格式
+		return c.JSON(http.StatusOK, ccxt.TransformBalances(balancePtrs))
 	}
 }
 
@@ -133,7 +144,8 @@ func CreateOrder(orderService *service.OrderService) echo.HandlerFunc {
 			})
 		}
 
-		return c.JSON(http.StatusCreated, order)
+		// 转换为 CCXT 格式
+		return c.JSON(http.StatusCreated, ccxt.TransformOrder(order))
 	}
 }
 
@@ -169,7 +181,8 @@ func GetOrder(orderService *service.OrderService) echo.HandlerFunc {
 			})
 		}
 
-		return c.JSON(http.StatusOK, order)
+		// 转换为 CCXT 格式
+		return c.JSON(http.StatusOK, ccxt.TransformOrder(order))
 	}
 }
 
@@ -232,8 +245,14 @@ func GetOrders(orderService *service.OrderService) echo.HandlerFunc {
 			})
 		}
 
+		// 转换为 CCXT 格式
+		result := make([]map[string]interface{}, len(orders))
+		for i := range orders {
+			result[i] = ccxt.TransformOrder(&orders[i])
+		}
+
 		return c.JSON(http.StatusOK, map[string]interface{}{
-			"orders": orders,
+			"orders": result,
 			"total":  total,
 			"page":   page,
 			"size":   pageSize,

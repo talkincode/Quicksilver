@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -70,14 +71,14 @@ func TestServerTime(t *testing.T) {
 
 // TestGetMarkets 测试获取交易对列表
 func TestGetMarkets(t *testing.T) {
-	db := testutil.NewTestDB(t)
+	cfg := testutil.NewTestConfig()
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/v1/markets", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := GetMarkets(db)
+	handler := GetMarkets(cfg)
 	err := handler(c)
 
 	require.NoError(t, err)
@@ -156,11 +157,12 @@ func TestGetTicker(t *testing.T) {
 				json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.Contains(t, response["error"], "not found")
 			} else {
-				var response model.Ticker
+				// 期望 CCXT 格式的响应
+				var response map[string]interface{}
 				err = json.Unmarshal(rec.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Equal(t, "BTC/USDT", response.Symbol)
-				assert.Equal(t, 50000.5, response.LastPrice)
+				assert.Equal(t, "BTC/USDT", response["symbol"])
+				assert.Equal(t, 50000.5, response["last"])
 			}
 		})
 	}
@@ -228,7 +230,8 @@ func TestGetTrades(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedStatus, rec.Code)
 
-			var trades []model.Trade
+			// 期望 CCXT 格式的响应（数组of maps）
+			var trades []map[string]interface{}
 			err = json.Unmarshal(rec.Body.Bytes(), &trades)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedCount, len(trades))
@@ -260,28 +263,27 @@ func TestGetBalance(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var balances []model.Balance
+	// 期望 CCXT 格式的响应（map of asset->balance）
+	var balances map[string]interface{}
 	err = json.Unmarshal(rec.Body.Bytes(), &balances)
 	require.NoError(t, err)
 
-	// 应该返回 2 个余额
+	// 应该返回 2 个资产
 	assert.Equal(t, 2, len(balances))
 
-	// 验证余额数据
-	usdtFound := false
-	btcFound := false
-	for _, balance := range balances {
-		if balance.Asset == "USDT" {
-			assert.Equal(t, 10000.0, balance.Available)
-			usdtFound = true
-		}
-		if balance.Asset == "BTC" {
-			assert.Equal(t, 0.5, balance.Available)
-			btcFound = true
-		}
-	}
-	assert.True(t, usdtFound, "USDT balance should be found")
-	assert.True(t, btcFound, "BTC balance should be found")
+	// 验证 USDT 余额
+	usdtBalance, ok := balances["USDT"].(map[string]interface{})
+	require.True(t, ok, "USDT balance should exist")
+	assert.Equal(t, 10000.0, usdtBalance["free"])
+	assert.Equal(t, 0.0, usdtBalance["used"])
+	assert.Equal(t, 10000.0, usdtBalance["total"])
+
+	// 验证 BTC 余额
+	btcBalance, ok := balances["BTC"].(map[string]interface{})
+	require.True(t, ok, "BTC balance should exist")
+	assert.Equal(t, 0.5, btcBalance["free"])
+	assert.Equal(t, 0.0, btcBalance["used"])
+	assert.Equal(t, 0.5, btcBalance["total"])
 }
 
 // TestCreateOrder 测试创建订单
@@ -369,11 +371,12 @@ func TestGetOrder(t *testing.T) {
 				json.Unmarshal(rec.Body.Bytes(), &response)
 				assert.Contains(t, response["error"], "not found")
 			} else {
-				var response model.Order
+				// 期望 CCXT 格式的响应
+				var response map[string]interface{}
 				err = json.Unmarshal(rec.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Equal(t, order.ID, response.ID)
-				assert.Equal(t, "BTC/USDT", response.Symbol)
+				assert.Equal(t, fmt.Sprintf("%d", order.ID), response["id"])
+				assert.Equal(t, "BTC/USDT", response["symbol"])
 			}
 		})
 	}

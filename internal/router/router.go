@@ -30,7 +30,7 @@ func SetupRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config, logger *zap.Logg
 	{
 		public.GET("/ping", api.Ping)
 		public.GET("/time", api.ServerTime)
-		public.GET("/markets", api.GetMarkets(db))
+		public.GET("/markets", api.GetMarkets(cfg))
 		public.GET("/ticker/:symbol", api.GetTicker(db))
 		public.GET("/trades/:symbol", api.GetTrades(db))
 	}
