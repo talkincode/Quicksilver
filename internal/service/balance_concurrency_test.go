@@ -1,6 +1,7 @@
 package service
 
 import (
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -12,8 +13,11 @@ import (
 )
 
 // TestFreezeBalanceConcurrency 测试并发冻结余额的竞态条件
+// 注意：需要 PostgreSQL 支持，使用 TEST_DB=postgres 运行
 func TestFreezeBalanceConcurrency(t *testing.T) {
-	t.Skip("Skipping due to SQLite memory database concurrency limitations")
+	if os.Getenv("TEST_DB") != "postgres" {
+		t.Skip("Skipping concurrency test (requires PostgreSQL, use TEST_DB=postgres)")
+	}
 
 	t.Run("Concurrent freeze operations with race protection", func(t *testing.T) {
 		// Given: 独立数据库实例
@@ -154,8 +158,11 @@ func TestFreezeBalanceConcurrency(t *testing.T) {
 }
 
 // TestDeadlockPrevention 测试死锁预防
+// 注意：需要 PostgreSQL 支持，使用 TEST_DB=postgres 运行
 func TestDeadlockPrevention(t *testing.T) {
-	t.Skip("Skipping due to SQLite memory database concurrency limitations")
+	if os.Getenv("TEST_DB") != "postgres" {
+		t.Skip("Skipping deadlock test (requires PostgreSQL, use TEST_DB=postgres)")
+	}
 
 	t.Run("No deadlock in circular operations", func(t *testing.T) {
 		// Given: 独立数据库实例

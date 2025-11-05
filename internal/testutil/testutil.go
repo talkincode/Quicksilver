@@ -2,11 +2,13 @@ package testutil
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -15,16 +17,40 @@ import (
 	"github.com/talkincode/quicksilver/internal/model"
 )
 
-// NewTestDB 创建内存测试数据库
+// NewTestDB 创建测试数据库
+// 支持两种模式：
+// 1. SQLite 内存模式（默认）：快速但不支持并发
+// 2. PostgreSQL 模式：设置环境变量 TEST_DB=postgres
 func NewTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	// 使用纯内存模式 :memory: 为每个测试创建独立数据库
-	// 每次调用 SetupTestDB 都会创建全新的数据库实例，确保测试隔离
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	require.NoError(t, err, "failed to create test database")
+	usePostgres := os.Getenv("TEST_DB") == "postgres"
+
+	var db *gorm.DB
+	var err error
+
+	if usePostgres {
+		// PostgreSQL 测试数据库
+		dsn := os.Getenv("TEST_DATABASE_URL")
+		if dsn == "" {
+			dsn = "host=localhost port=5432 user=postgres password=pgdb dbname=quicksilver_test sslmode=disable"
+		}
+
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Silent),
+		})
+		require.NoError(t, err, "failed to create PostgreSQL test database")
+
+		// PostgreSQL: 每个测试清理一次，避免数据残留
+		// 注意：使用 t.Helper() 确保测试失败时能正确定位
+		cleanupTestDB(t, db)
+	} else {
+		// SQLite 内存模式（默认）
+		db, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Silent),
+		})
+		require.NoError(t, err, "failed to create SQLite test database")
+	}
 
 	// 自动迁移所有模型
 	err = db.AutoMigrate(
@@ -37,6 +63,21 @@ func NewTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err, "failed to migrate test database")
 
 	return db
+}
+
+// cleanupTestDB 清理测试数据库中的所有数据
+func cleanupTestDB(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	// 按照外键依赖顺序删除
+	tables := []string{"trades", "orders", "balances", "tickers", "users"}
+	for _, table := range tables {
+		err := db.Exec(fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE", table)).Error
+		if err != nil {
+			// 如果表不存在，忽略错误
+			t.Logf("Warning: failed to truncate table %s: %v", table, err)
+		}
+	}
 }
 
 // SetupTestDB 创建内存测试数据库（别名）

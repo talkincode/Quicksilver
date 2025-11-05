@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -442,8 +443,11 @@ func TestTriggerPendingOrdersMatching(t *testing.T) {
 }
 
 // TestUpdateTickersWithMatching 测试价格更新后自动触发撮合
+// 注意：需要 PostgreSQL 支持，使用 TEST_DB=postgres 运行
 func TestUpdateTickersWithMatching(t *testing.T) {
-	t.Skip("Skipping async matching test (SQLite memory database limitations)")
+	if os.Getenv("TEST_DB") != "postgres" {
+		t.Skip("Skipping async matching test (requires PostgreSQL, use TEST_DB=postgres)")
+	}
 
 	db := testutil.NewTestDB(t)
 	logger := testutil.NewTestLogger()

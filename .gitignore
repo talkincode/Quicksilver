@@ -13,6 +13,7 @@ quicksilver
 *.test
 
 # Output of the go coverage tool
+coverage/
 *.out
 coverage.html
 

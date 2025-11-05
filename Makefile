@@ -7,6 +7,7 @@
 APP_NAME := quicksilver
 VERSION := 1.0.0
 BUILD_DIR := bin
+COVERAGE_DIR := coverage
 MAIN_PATH := cmd/server/main.go
 
 # Go 相关变量
@@ -34,14 +35,83 @@ build: ## 编译应用
 
 test: ## 运行所有测试
 	@echo "Running all tests..."
-	CGO_ENABLED=1 $(GOTEST) -v -race -coverprofile=coverage.out -covermode=atomic ./...
+	@mkdir -p $(COVERAGE_DIR)
+	CGO_ENABLED=1 $(GOTEST) -v -race -coverprofile=$(COVERAGE_DIR)/coverage.out -covermode=atomic ./...
 	@echo ""
 	@echo "Coverage summary:"
-	@$(GOCMD) tool cover -func=coverage.out | grep total
+	@$(GOCMD) tool cover -func=$(COVERAGE_DIR)/coverage.out | grep total
+
+test-pg: ## 运行所有测试（使用 PostgreSQL）
+	@echo "Running all tests with PostgreSQL..."
+	@echo "Note: PostgreSQL must be running on localhost:5432"
+	@echo "Database: quicksilver_test, User: postgres, Password: pgdb"
+	@$(MAKE) test-pg-api
+	@$(MAKE) test-pg-ccxt
+	@$(MAKE) test-pg-config
+	@$(MAKE) test-pg-engine
+	@$(MAKE) test-pg-middleware
+	@$(MAKE) test-pg-model
+	@$(MAKE) test-pg-service
+	@echo ""
+	@echo "=========================================="
+	@echo "  ✅ All PostgreSQL Tests Passed!"
+	@echo "=========================================="
+
+test-pg-api: ## 运行 API 测试（PostgreSQL）
+	@echo "Running API tests with PostgreSQL..."
+	@mkdir -p $(COVERAGE_DIR)
+	@TEST_DB=postgres TEST_DATABASE_URL="host=localhost port=5432 user=postgres password=pgdb dbname=quicksilver_test sslmode=disable" \
+		CGO_ENABLED=1 $(GOTEST) -v -race -coverprofile=$(COVERAGE_DIR)/coverage-api.out -covermode=atomic ./internal/api/...
+
+test-pg-ccxt: ## 运行 CCXT 测试（PostgreSQL）
+	@echo "Running CCXT tests with PostgreSQL..."
+	@mkdir -p $(COVERAGE_DIR)
+	@TEST_DB=postgres TEST_DATABASE_URL="host=localhost port=5432 user=postgres password=pgdb dbname=quicksilver_test sslmode=disable" \
+		CGO_ENABLED=1 $(GOTEST) -v -race -coverprofile=$(COVERAGE_DIR)/coverage-ccxt.out -covermode=atomic ./internal/ccxt/...
+
+test-pg-config: ## 运行 Config 测试（PostgreSQL）
+	@echo "Running Config tests with PostgreSQL..."
+	@mkdir -p $(COVERAGE_DIR)
+	@TEST_DB=postgres TEST_DATABASE_URL="host=localhost port=5432 user=postgres password=pgdb dbname=quicksilver_test sslmode=disable" \
+		CGO_ENABLED=1 $(GOTEST) -v -race -coverprofile=$(COVERAGE_DIR)/coverage-config.out -covermode=atomic ./internal/config/...
+
+test-pg-engine: ## 运行 Engine 测试（PostgreSQL）
+	@echo "Running Engine tests with PostgreSQL..."
+	@mkdir -p $(COVERAGE_DIR)
+	@TEST_DB=postgres TEST_DATABASE_URL="host=localhost port=5432 user=postgres password=pgdb dbname=quicksilver_test sslmode=disable" \
+		CGO_ENABLED=1 $(GOTEST) -v -race -coverprofile=$(COVERAGE_DIR)/coverage-engine.out -covermode=atomic ./internal/engine/...
+
+test-pg-middleware: ## 运行 Middleware 测试（PostgreSQL）
+	@echo "Running Middleware tests with PostgreSQL..."
+	@mkdir -p $(COVERAGE_DIR)
+	@TEST_DB=postgres TEST_DATABASE_URL="host=localhost port=5432 user=postgres password=pgdb dbname=quicksilver_test sslmode=disable" \
+		CGO_ENABLED=1 $(GOTEST) -v -race -coverprofile=$(COVERAGE_DIR)/coverage-middleware.out -covermode=atomic ./internal/middleware/...
+
+test-pg-model: ## 运行 Model 测试（PostgreSQL）
+	@echo "Running Model tests with PostgreSQL..."
+	@mkdir -p $(COVERAGE_DIR)
+	@TEST_DB=postgres TEST_DATABASE_URL="host=localhost port=5432 user=postgres password=pgdb dbname=quicksilver_test sslmode=disable" \
+		CGO_ENABLED=1 $(GOTEST) -v -race -coverprofile=$(COVERAGE_DIR)/coverage-model.out -covermode=atomic ./internal/model/...
+
+test-pg-service: ## 运行 Service 测试（PostgreSQL）
+	@echo "Running Service tests with PostgreSQL..."
+	@mkdir -p $(COVERAGE_DIR)
+	@TEST_DB=postgres TEST_DATABASE_URL="host=localhost port=5432 user=postgres password=pgdb dbname=quicksilver_test sslmode=disable" \
+		CGO_ENABLED=1 $(GOTEST) -v -race -coverprofile=$(COVERAGE_DIR)/coverage-service.out -covermode=atomic ./internal/service/...
+
+test-pg-coverage: ## 合并所有 PostgreSQL 测试覆盖率
+	@echo "Merging coverage reports..."
+	@mkdir -p $(COVERAGE_DIR)
+	@echo "mode: atomic" > $(COVERAGE_DIR)/coverage-pg.out
+	@tail -q -n +2 $(COVERAGE_DIR)/coverage-*.out >> $(COVERAGE_DIR)/coverage-pg.out 2>/dev/null || true
+	@$(GOCMD) tool cover -func=$(COVERAGE_DIR)/coverage-pg.out | tail -1
+	@$(GOCMD) tool cover -html=$(COVERAGE_DIR)/coverage-pg.out -o $(COVERAGE_DIR)/coverage-pg.html
+	@echo "Coverage report: $(COVERAGE_DIR)/coverage-pg.html"
 
 test-unit: ## 运行单元测试
 	@echo "Running unit tests..."
-	CGO_ENABLED=1 $(GOTEST) -v -short -coverprofile=coverage.out ./...
+	@mkdir -p $(COVERAGE_DIR)
+	CGO_ENABLED=1 $(GOTEST) -v -short -coverprofile=$(COVERAGE_DIR)/coverage.out ./...
 
 test-integration: ## 运行集成测试
 	@echo "Running integration tests..."
@@ -54,8 +124,8 @@ test-watch: ## 监听文件变化自动运行测试
 
 test-coverage: test ## 生成测试覆盖率报告
 	@echo "Generating coverage report..."
-	$(GOCMD) tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report: coverage.html"
+	$(GOCMD) tool cover -html=$(COVERAGE_DIR)/coverage.out -o $(COVERAGE_DIR)/coverage.html
+	@echo "Coverage report: $(COVERAGE_DIR)/coverage.html"
 
 test-ccxt: ## 运行 CCXT 兼容性测试（Python）
 	@echo "Running CCXT compatibility tests (Python)..."
@@ -116,7 +186,7 @@ tidy: ## 整理依赖
 clean: ## 清理构建产物
 	@echo "Cleaning..."
 	@rm -rf $(BUILD_DIR)
-	@rm -f coverage.out coverage.html
+	@rm -rf $(COVERAGE_DIR)
 	@echo "Clean complete"
 
 docker-build: ## 构建 Docker 镜像
@@ -226,7 +296,7 @@ fmt-check: ## 检查代码格式
 test-coverage-check: test ## 运行测试并检查覆盖率阈值
 	@echo "Checking coverage threshold..."
 	@chmod +x scripts/check_coverage.sh
-	@./scripts/check_coverage.sh coverage.out 70
+	@./scripts/check_coverage.sh $(COVERAGE_DIR)/coverage.out 70
 
 .PHONY: bench
 bench: ## 运行性能基准测试

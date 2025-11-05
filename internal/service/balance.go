@@ -258,18 +258,50 @@ func (s *BalanceService) TransferBalance(fromUserID, toUserID uint, asset string
 
 	// 2. 使用事务确保原子性
 	return s.db.Transaction(func(tx *gorm.DB) error {
-		// 锁定并获取发送方余额
-		var fromBalance model.Balance
-		if err := tx.Where("user_id = ? AND asset = ?", fromUserID, asset).
-			Clauses(clause.Locking{Strength: "UPDATE"}).
-			First(&fromBalance).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return fmt.Errorf("sender balance not found")
-			}
-			return fmt.Errorf("failed to lock sender balance: %w", err)
+		// 为避免死锁，总是按 user_id 顺序锁定账户
+		firstUserID := fromUserID
+		secondUserID := toUserID
+		if fromUserID > toUserID {
+			firstUserID = toUserID
+			secondUserID = fromUserID
 		}
 
-		// 检查发送方余额是否足够
+		// 先锁定 ID 较小的用户余额
+		var firstBalance model.Balance
+		if err := tx.Where("user_id = ? AND asset = ?", firstUserID, asset).
+			Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&firstBalance).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return fmt.Errorf("failed to lock first balance: %w", err)
+			}
+			// 记录不存在，稍后处理
+		}
+
+		// 再锁定 ID 较大的用户余额
+		var secondBalance model.Balance
+		if err := tx.Where("user_id = ? AND asset = ?", secondUserID, asset).
+			Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&secondBalance).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return fmt.Errorf("failed to lock second balance: %w", err)
+			}
+			// 记录不存在，稍后处理
+		}
+
+		// 获取发送方和接收方余额（已锁定）
+		var fromBalance, toBalance model.Balance
+		if fromUserID == firstUserID {
+			fromBalance = firstBalance
+			toBalance = secondBalance
+		} else {
+			fromBalance = secondBalance
+			toBalance = firstBalance
+		}
+
+		// 检查发送方余额是否存在且足够
+		if fromBalance.ID == 0 {
+			return fmt.Errorf("sender balance not found")
+		}
 		if fromBalance.Available < amount {
 			return fmt.Errorf("insufficient balance: available %.8f, required %.8f", fromBalance.Available, amount)
 		}
@@ -281,10 +313,7 @@ func (s *BalanceService) TransferBalance(fromUserID, toUserID uint, asset string
 		}
 
 		// 增加接收方余额
-		var toBalance model.Balance
-		err := tx.Where("user_id = ? AND asset = ?", toUserID, asset).First(&toBalance).Error
-
-		if err == gorm.ErrRecordNotFound {
+		if toBalance.ID == 0 {
 			// 接收方余额不存在，创建新记录
 			toBalance = model.Balance{
 				UserID:    toUserID,
@@ -295,8 +324,6 @@ func (s *BalanceService) TransferBalance(fromUserID, toUserID uint, asset string
 			if err := tx.Create(&toBalance).Error; err != nil {
 				return fmt.Errorf("failed to create receiver balance: %w", err)
 			}
-		} else if err != nil {
-			return fmt.Errorf("failed to get receiver balance: %w", err)
 		} else {
 			// 接收方余额存在，增加金额
 			toBalance.Available += amount
