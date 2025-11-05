@@ -440,10 +440,11 @@ func TestGetOrders(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var response map[string]interface{}
+	// 修复：GetOrders 现在直接返回数组
+	var response []map[string]interface{}
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, float64(3), response["total"])
+	assert.Equal(t, 3, len(response))
 }
 
 // TestGetOpenOrders 测试获取未完成订单
