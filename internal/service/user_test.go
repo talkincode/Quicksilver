@@ -5,7 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
+	"github.com/talkincode/quicksilver/internal/model"
 	"github.com/talkincode/quicksilver/internal/testutil"
 )
 
@@ -318,5 +320,132 @@ func TestGenerateAPICredentials(t *testing.T) {
 		assert.NotEqual(t, apiSecret1, apiSecret2, "API Secrets should be unique")
 		assert.Greater(t, len(apiKey1), 20)
 		assert.Greater(t, len(apiSecret1), 30)
+	})
+}
+
+// TestDeleteUser 测试软删除用户
+func TestDeleteUser(t *testing.T) {
+	t.Run("Soft delete user successfully", func(t *testing.T) {
+		// Given: 用户存在
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		user, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "delete@example.com",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "active", user.Status)
+
+		// When: 删除用户
+		err = userService.DeleteUser(user.ID)
+
+		// Then: 成功且状态变为 inactive
+		require.NoError(t, err)
+
+		// And: 用户仍然存在但状态为 inactive
+		var deletedUser model.User
+		err = db.First(&deletedUser, user.ID).Error
+		require.NoError(t, err)
+		assert.Equal(t, "inactive", deletedUser.Status)
+		assert.Equal(t, user.Email, deletedUser.Email)
+		assert.Equal(t, user.APIKey, deletedUser.APIKey)
+	})
+
+	t.Run("Delete non-existent user", func(t *testing.T) {
+		// Given: 用户不存在
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		// When: 尝试删除不存在的用户
+		err := userService.DeleteUser(99999)
+
+		// Then: 返回错误
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "user not found")
+	})
+
+	t.Run("Delete already inactive user", func(t *testing.T) {
+		// Given: 用户已经是 inactive 状态
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		user, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "alreadyinactive@example.com",
+		})
+		require.NoError(t, err)
+
+		// 先设置为 inactive
+		_, err = userService.UpdateUserStatus(user.ID, "inactive")
+		require.NoError(t, err)
+
+		// When: 再次删除
+		err = userService.DeleteUser(user.ID)
+
+		// Then: 仍然成功
+		require.NoError(t, err)
+
+		// And: 状态保持 inactive
+		var deletedUser model.User
+		db.First(&deletedUser, user.ID)
+		assert.Equal(t, "inactive", deletedUser.Status)
+	})
+}
+
+// TestHardDeleteUser 测试物理删除用户
+func TestHardDeleteUser(t *testing.T) {
+	t.Run("Hard delete user and all related data", func(t *testing.T) {
+		// Given: 用户存在并有关联数据
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+		balanceService := NewBalanceService(db, cfg, logger)
+
+		user, _, err := userService.CreateUser(CreateUserRequest{
+			Email: "harddelete@example.com",
+		})
+		require.NoError(t, err)
+
+		// 创建余额数据
+		err = balanceService.AddBalance(user.ID, "USDT", 1000.0)
+		require.NoError(t, err)
+
+		// When: 彻底删除用户
+		err = userService.HardDeleteUser(user.ID)
+
+		// Then: 成功
+		require.NoError(t, err)
+
+		// And: 用户记录不存在
+		var deletedUser model.User
+		err = db.First(&deletedUser, user.ID).Error
+		require.Error(t, err)
+		assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+
+		// And: 余额记录也被删除
+		var balances []model.Balance
+		err = db.Where("user_id = ?", user.ID).Find(&balances).Error
+		require.NoError(t, err)
+		assert.Empty(t, balances)
+	})
+
+	t.Run("Hard delete non-existent user", func(t *testing.T) {
+		// Given: 用户不存在
+		db := testutil.SetupTestDB(t)
+		cfg := testutil.LoadTestConfig(t)
+		logger := testutil.NewTestLogger()
+		userService := NewUserService(db, cfg, logger)
+
+		// When: 尝试删除
+		err := userService.HardDeleteUser(99999)
+
+		// Then: 不报错（Delete 不存在的记录不报错）
+		require.NoError(t, err)
 	})
 }

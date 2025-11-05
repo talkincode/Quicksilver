@@ -3,6 +3,7 @@ package service
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"regexp"
 
@@ -228,8 +229,39 @@ func (s *UserService) generateAPICredentials() (string, string, error) {
 	return apiKey, apiSecret, nil
 }
 
-// DeleteUser 彻底删除用户及其所有相关数据
+// DeleteUser 软删除用户（将状态设置为 inactive）
+// 保留用户及相关数据用于历史记录和审计
 func (s *UserService) DeleteUser(userID uint) error {
+	// 查询用户是否存在
+	var user model.User
+	if err := s.db.First(&user, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("user not found")
+		}
+		return fmt.Errorf("failed to query user: %w", err)
+	}
+
+	// 软删除：更新状态为 inactive
+	result := s.db.Model(&user).Update("status", "inactive")
+	if result.Error != nil {
+		return fmt.Errorf("failed to deactivate user: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	s.logger.Info("User deactivated (soft delete)",
+		zap.Uint("user_id", userID),
+		zap.String("email", user.Email),
+	)
+
+	return nil
+}
+
+// HardDeleteUser 彻底删除用户及其所有相关数据（仅在必要时使用）
+// 警告：此操作不可逆，会永久删除所有关联数据
+func (s *UserService) HardDeleteUser(userID uint) error {
 	// 开始数据库事务
 	tx := s.db.Begin()
 	if tx.Error != nil {
@@ -270,7 +302,7 @@ func (s *UserService) DeleteUser(userID uint) error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	s.logger.Info("User and all related data deleted successfully",
+	s.logger.Warn("User and all related data permanently deleted (hard delete)",
 		zap.Uint("user_id", userID),
 	)
 
