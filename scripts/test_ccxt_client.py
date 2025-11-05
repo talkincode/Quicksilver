@@ -9,9 +9,9 @@ CCXT 客户端集成测试脚本
     python scripts/test_ccxt_client.py
 """
 
-import ccxt
 import json
 import time
+import requests
 from datetime import datetime
 
 
@@ -27,33 +27,20 @@ class QuicksilverTester:
             api_key: 用户 API Key (测试私有接口时必需)
             api_secret: 用户 API Secret (测试私有接口时必需)
         """
-        self.exchange = ccxt.Exchange(
-            {
-                "id": "quicksilver",
-                "name": "Quicksilver",
-                "urls": {
-                    "api": {
-                        "public": base_url + "/v1",
-                        "private": base_url + "/v1",
-                    },
-                },
-                "has": {
-                    "fetchMarkets": True,
-                    "fetchTicker": True,
-                    "fetchTrades": True,
-                    "fetchBalance": True,
-                    "createOrder": True,
-                    "cancelOrder": True,
-                    "fetchOrder": True,
-                    "fetchOrders": True,
-                    "fetchOpenOrders": True,
-                    "fetchMyTrades": True,
-                },
-                "apiKey": api_key,
-                "secret": api_secret,
-                "enableRateLimit": False,
-            }
-        )
+        self.base_url = base_url
+        self.api_key = api_key
+        self.api_secret = api_secret
+        self.session = requests.Session()
+
+        # 设置认证头
+        if api_key and api_secret:
+            self.session.headers.update(
+                {
+                    "X-API-Key": api_key,
+                    "X-API-Secret": api_secret,
+                    "Content-Type": "application/json",
+                }
+            )
 
         self.results = {"passed": 0, "failed": 0, "errors": []}
 
@@ -74,15 +61,17 @@ class QuicksilverTester:
         """测试 GET /v1/time"""
         print("🔍 Testing: Server Time")
         try:
-            response = self.exchange.publicGetTime()
+            response = self.session.get(f"{self.base_url}/v1/time")
+            response.raise_for_status()
+            data = response.json()
 
             # 验证响应格式
-            assert "timestamp" in response, "缺少 timestamp 字段"
-            assert "datetime" in response, "缺少 datetime 字段"
-            assert isinstance(response["timestamp"], int), "timestamp 类型错误"
+            assert "timestamp" in data, "缺少 timestamp 字段"
+            assert "datetime" in data, "缺少 datetime 字段"
+            assert isinstance(data["timestamp"], int), "timestamp 类型错误"
 
             self.log_test("GET /v1/time", True)
-            print(f"  Server Time: {response['datetime']}")
+            print(f"  Server Time: {data['datetime']}")
             return True
         except Exception as e:
             self.log_test("GET /v1/time", False, str(e))
@@ -92,19 +81,21 @@ class QuicksilverTester:
         """测试 GET /v1/markets (fetchMarkets)"""
         print("🔍 Testing: Fetch Markets")
         try:
-            response = self.exchange.publicGetMarkets()
+            response = self.session.get(f"{self.base_url}/v1/markets")
+            response.raise_for_status()
+            data = response.json()
 
             # 验证响应格式
-            assert isinstance(response, list), "markets 应该是数组"
-            assert len(response) > 0, "markets 不应为空"
+            assert isinstance(data, list), "markets 应该是数组"
+            assert len(data) > 0, "markets 不应为空"
 
-            market = response[0]
+            market = data[0]
             required_fields = ["id", "symbol", "base", "quote", "active", "limits"]
             for field in required_fields:
                 assert field in market, f"缺少字段: {field}"
 
             self.log_test("GET /v1/markets", True)
-            print(f"  Total Markets: {len(response)}")
+            print(f"  Total Markets: {len(data)}")
             print(f"  Sample: {market['symbol']}")
             return True
         except Exception as e:
@@ -115,9 +106,11 @@ class QuicksilverTester:
         """测试 GET /v1/ticker/:symbol (fetchTicker)"""
         print(f"🔍 Testing: Fetch Ticker ({symbol})")
         try:
-            # CCXT 格式: BTC/USDT, API 路径需要转换为 BTC-USDT
+            # API 路径需要转换: BTC/USDT -> BTC-USDT
             url_symbol = symbol.replace("/", "-")
-            response = self.exchange.publicGetTickerSymbol({"symbol": url_symbol})
+            response = self.session.get(f"{self.base_url}/v1/ticker/{url_symbol}")
+            response.raise_for_status()
+            data = response.json()
 
             # 验证 CCXT 标准 Ticker 格式
             required_fields = [
@@ -133,15 +126,15 @@ class QuicksilverTester:
                 "quoteVolume",
             ]
             for field in required_fields:
-                assert field in response, f"缺少字段: {field}"
+                assert field in data, f"缺少字段: {field}"
 
-            assert response["symbol"] == symbol, f"symbol 不匹配: {response['symbol']}"
-            assert isinstance(response["timestamp"], int), "timestamp 类型错误"
-            assert isinstance(response["last"], (int, float)), "last price 类型错误"
+            assert data["symbol"] == symbol, f"symbol 不匹配: {data['symbol']}"
+            assert isinstance(data["timestamp"], int), "timestamp 类型错误"
+            assert isinstance(data["last"], (int, float)), "last price 类型错误"
 
             self.log_test(f"GET /v1/ticker/{symbol}", True)
-            print(f"  Last Price: {response['last']}")
-            print(f"  24h Volume: {response['baseVolume']}")
+            print(f"  Last Price: {data['last']}")
+            print(f"  24h Volume: {data['baseVolume']}")
             return True
         except Exception as e:
             self.log_test(f"GET /v1/ticker/{symbol}", False, str(e))
@@ -152,13 +145,15 @@ class QuicksilverTester:
         print(f"🔍 Testing: Fetch Trades ({symbol})")
         try:
             url_symbol = symbol.replace("/", "-")
-            response = self.exchange.publicGetTradesSymbol({"symbol": url_symbol})
+            response = self.session.get(f"{self.base_url}/v1/trades/{url_symbol}")
+            response.raise_for_status()
+            data = response.json()
 
             # 验证响应格式
-            assert isinstance(response, list), "trades 应该是数组"
+            assert isinstance(data, list), "trades 应该是数组"
 
-            if len(response) > 0:
-                trade = response[0]
+            if len(data) > 0:
+                trade = data[0]
                 required_fields = [
                     "id",
                     "timestamp",
@@ -175,7 +170,7 @@ class QuicksilverTester:
                 assert trade["side"] in ["buy", "sell"], "side 值错误"
 
             self.log_test(f"GET /v1/trades/{symbol}", True)
-            print(f"  Total Trades: {len(response)}")
+            print(f"  Total Trades: {len(data)}")
             return True
         except Exception as e:
             self.log_test(f"GET /v1/trades/{symbol}", False, str(e))
@@ -185,18 +180,20 @@ class QuicksilverTester:
         """测试 GET /v1/balance (fetchBalance) - 需要认证"""
         print("🔍 Testing: Fetch Balance (Private)")
 
-        if not self.exchange.apiKey or not self.exchange.secret:
+        if not self.api_key or not self.api_secret:
             self.log_test("GET /v1/balance", False, "缺少 API Key/Secret")
             return False
 
         try:
-            response = self.exchange.privateGetBalance()
+            response = self.session.get(f"{self.base_url}/v1/balance")
+            response.raise_for_status()
+            data = response.json()
 
             # 验证 CCXT 标准 Balance 格式
-            assert isinstance(response, dict), "balance 应该是对象"
+            assert isinstance(data, dict), "balance 应该是对象"
 
-            # CCXT 格式应包含 'free', 'used', 'total' 等字段
-            for asset in response:
+            # CCXT 格式应包含各资产的 'free', 'used', 'total'
+            for asset in data:
                 if asset not in [
                     "info",
                     "free",
@@ -205,14 +202,14 @@ class QuicksilverTester:
                     "timestamp",
                     "datetime",
                 ]:
-                    balance = response[asset]
+                    balance = data[asset]
                     assert "free" in balance, f"{asset} 缺少 free 字段"
                     assert "used" in balance, f"{asset} 缺少 used 字段"
                     assert "total" in balance, f"{asset} 缺少 total 字段"
 
             self.log_test("GET /v1/balance", True)
             print(
-                f"  Assets: {len([k for k in response.keys() if k not in ['info', 'free', 'used', 'total', 'timestamp', 'datetime']])}"
+                f"  Assets: {len([k for k in data.keys() if k not in ['info', 'free', 'used', 'total', 'timestamp', 'datetime']])}"
             )
             return True
         except Exception as e:
@@ -230,7 +227,7 @@ class QuicksilverTester:
         """测试 POST /v1/order (createOrder) - 需要认证"""
         print(f"🔍 Testing: Create Order ({side} {order_type})")
 
-        if not self.exchange.apiKey or not self.exchange.secret:
+        if not self.api_key or not self.api_secret:
             self.log_test("POST /v1/order", False, "缺少 API Key/Secret")
             return False
 
@@ -245,7 +242,9 @@ class QuicksilverTester:
             if order_type == "limit":
                 params["price"] = price
 
-            response = self.exchange.privatePostOrder(params)
+            response = self.session.post(f"{self.base_url}/v1/order", json=params)
+            response.raise_for_status()
+            data = response.json()
 
             # 验证 CCXT 标准 Order 格式
             required_fields = [
@@ -260,16 +259,16 @@ class QuicksilverTester:
                 "status",
             ]
             for field in required_fields:
-                assert field in response, f"缺少字段: {field}"
+                assert field in data, f"缺少字段: {field}"
 
-            assert response["symbol"] == symbol, "symbol 不匹配"
-            assert response["side"] == side, "side 不匹配"
-            assert response["type"] == order_type, "type 不匹配"
+            assert data["symbol"] == symbol, "symbol 不匹配"
+            assert data["side"] == side, "side 不匹配"
+            assert data["type"] == order_type, "type 不匹配"
 
             self.log_test("POST /v1/order", True)
-            print(f"  Order ID: {response['id']}")
-            print(f"  Status: {response['status']}")
-            return response["id"]
+            print(f"  Order ID: {data['id']}")
+            print(f"  Status: {data['status']}")
+            return data["id"]
         except Exception as e:
             self.log_test("POST /v1/order", False, str(e))
             return None
@@ -278,19 +277,21 @@ class QuicksilverTester:
         """测试 GET /v1/order/:id (fetchOrder) - 需要认证"""
         print(f"🔍 Testing: Fetch Order (ID: {order_id})")
 
-        if not self.exchange.apiKey or not self.exchange.secret:
+        if not self.api_key or not self.api_secret:
             self.log_test("GET /v1/order/:id", False, "缺少 API Key/Secret")
             return False
 
         try:
-            response = self.exchange.privateGetOrderId({"id": order_id})
+            response = self.session.get(f"{self.base_url}/v1/order/{order_id}")
+            response.raise_for_status()
+            data = response.json()
 
             # 验证格式
-            assert "id" in response, "缺少 id 字段"
-            assert str(response["id"]) == str(order_id), "订单 ID 不匹配"
+            assert "id" in data, "缺少 id 字段"
+            assert str(data["id"]) == str(order_id), "订单 ID 不匹配"
 
             self.log_test(f"GET /v1/order/{order_id}", True)
-            print(f"  Status: {response.get('status', 'N/A')}")
+            print(f"  Status: {data.get('status', 'N/A')}")
             return True
         except Exception as e:
             self.log_test(f"GET /v1/order/{order_id}", False, str(e))
@@ -300,19 +301,18 @@ class QuicksilverTester:
         """测试 DELETE /v1/order/:id (cancelOrder) - 需要认证"""
         print(f"🔍 Testing: Cancel Order (ID: {order_id})")
 
-        if not self.exchange.apiKey or not self.exchange.secret:
+        if not self.api_key or not self.api_secret:
             self.log_test("DELETE /v1/order/:id", False, "缺少 API Key/Secret")
             return False
 
         try:
-            response = self.exchange.privateDeleteOrderId({"id": order_id})
+            response = self.session.delete(f"{self.base_url}/v1/order/{order_id}")
+            response.raise_for_status()
+            data = response.json()
 
             # 验证格式
-            assert "id" in response, "缺少 id 字段"
-            assert response.get("status") in [
-                "cancelled",
-                "canceled",
-            ], "状态应为 cancelled"
+            assert "id" in data, "缺少 id 字段"
+            assert data.get("status") in ["cancelled", "canceled"], "状态应为 cancelled"
 
             self.log_test(f"DELETE /v1/order/{order_id}", True)
             return True
@@ -324,18 +324,22 @@ class QuicksilverTester:
         """测试 GET /v1/orders (fetchOrders) - 需要认证"""
         print(f"🔍 Testing: Fetch Orders ({symbol})")
 
-        if not self.exchange.apiKey or not self.exchange.secret:
+        if not self.api_key or not self.api_secret:
             self.log_test("GET /v1/orders", False, "缺少 API Key/Secret")
             return False
 
         try:
-            response = self.exchange.privateGetOrders({"symbol": symbol})
+            response = self.session.get(
+                f"{self.base_url}/v1/orders", params={"symbol": symbol}
+            )
+            response.raise_for_status()
+            data = response.json()
 
             # 验证格式
-            assert isinstance(response, list), "orders 应该是数组"
+            assert isinstance(data, list), "orders 应该是数组"
 
             self.log_test("GET /v1/orders", True)
-            print(f"  Total Orders: {len(response)}")
+            print(f"  Total Orders: {len(data)}")
             return True
         except Exception as e:
             self.log_test("GET /v1/orders", False, str(e))
@@ -345,18 +349,22 @@ class QuicksilverTester:
         """测试 GET /v1/orders/open (fetchOpenOrders) - 需要认证"""
         print(f"🔍 Testing: Fetch Open Orders ({symbol})")
 
-        if not self.exchange.apiKey or not self.exchange.secret:
+        if not self.api_key or not self.api_secret:
             self.log_test("GET /v1/orders/open", False, "缺少 API Key/Secret")
             return False
 
         try:
-            response = self.exchange.privateGetOrdersOpen({"symbol": symbol})
+            response = self.session.get(
+                f"{self.base_url}/v1/orders/open", params={"symbol": symbol}
+            )
+            response.raise_for_status()
+            data = response.json()
 
             # 验证格式
-            assert isinstance(response, list), "orders 应该是数组"
+            assert isinstance(data, list), "orders 应该是数组"
 
             self.log_test("GET /v1/orders/open", True)
-            print(f"  Open Orders: {len(response)}")
+            print(f"  Open Orders: {len(data)}")
             return True
         except Exception as e:
             self.log_test("GET /v1/orders/open", False, str(e))
@@ -366,18 +374,22 @@ class QuicksilverTester:
         """测试 GET /v1/myTrades (fetchMyTrades) - 需要认证"""
         print(f"🔍 Testing: Fetch My Trades ({symbol})")
 
-        if not self.exchange.apiKey or not self.exchange.secret:
+        if not self.api_key or not self.api_secret:
             self.log_test("GET /v1/myTrades", False, "缺少 API Key/Secret")
             return False
 
         try:
-            response = self.exchange.privateGetMyTrades({"symbol": symbol})
+            response = self.session.get(
+                f"{self.base_url}/v1/myTrades", params={"symbol": symbol}
+            )
+            response.raise_for_status()
+            data = response.json()
 
             # 验证格式
-            assert isinstance(response, list), "trades 应该是数组"
+            assert isinstance(data, list), "trades 应该是数组"
 
             self.log_test("GET /v1/myTrades", True)
-            print(f"  My Trades: {len(response)}")
+            print(f"  My Trades: {len(data)}")
             return True
         except Exception as e:
             self.log_test("GET /v1/myTrades", False, str(e))
@@ -401,7 +413,7 @@ class QuicksilverTester:
         print()
 
         # 私有 API 测试
-        if self.exchange.apiKey and self.exchange.secret:
+        if self.api_key and self.api_secret:
             print("📂 Private API Tests (Authenticated)")
             print("-" * 60)
             self.test_fetch_balance()

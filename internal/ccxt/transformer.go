@@ -19,24 +19,41 @@ func TransformTicker(ticker *model.Ticker) map[string]interface{} {
 		"info":      map[string]interface{}{}, // 原始数据占位符
 	}
 
-	// 处理可选的指针字段
+	// CCXT 要求的必填字段，使用默认值 0 if nil
 	if ticker.High24h != nil {
 		result["high"] = *ticker.High24h
+	} else {
+		result["high"] = 0
 	}
+
 	if ticker.Low24h != nil {
 		result["low"] = *ticker.Low24h
+	} else {
+		result["low"] = 0
 	}
+
 	if ticker.BidPrice != nil {
 		result["bid"] = *ticker.BidPrice
+	} else {
+		result["bid"] = ticker.LastPrice // 使用 last price 作为后备
 	}
+
 	if ticker.AskPrice != nil {
 		result["ask"] = *ticker.AskPrice
+	} else {
+		result["ask"] = ticker.LastPrice // 使用 last price 作为后备
 	}
+
 	if ticker.Volume24hBase != nil {
 		result["baseVolume"] = *ticker.Volume24hBase
+	} else {
+		result["baseVolume"] = 0
 	}
+
 	if ticker.Volume24hQuote != nil {
 		result["quoteVolume"] = *ticker.Volume24hQuote
+	} else {
+		result["quoteVolume"] = 0
 	}
 
 	return result

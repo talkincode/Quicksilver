@@ -211,9 +211,18 @@ func CancelOrder(orderService *service.OrderService) echo.HandlerFunc {
 			})
 		}
 
-		return c.JSON(http.StatusOK, map[string]string{
-			"message": "order cancelled",
-		})
+		// CCXT 标准格式：返回包含 id 的订单信息
+		order, err := orderService.GetOrderByID(orderID)
+		if err != nil {
+			// 如果获取失败，至少返回基础信息
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"id":      fmt.Sprintf("%d", orderID),
+				"status":  "cancelled",
+				"message": "order cancelled",
+			})
+		}
+
+		return c.JSON(http.StatusOK, ccxt.TransformOrder(order))
 	}
 }
 
@@ -238,7 +247,7 @@ func GetOrders(orderService *service.OrderService) echo.HandlerFunc {
 		}
 
 		// 获取订单列表
-		orders, total, err := orderService.GetUserOrders(userID, page, pageSize)
+		orders, _, err := orderService.GetUserOrders(userID, page, pageSize)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "failed to fetch orders",
@@ -251,12 +260,8 @@ func GetOrders(orderService *service.OrderService) echo.HandlerFunc {
 			result[i] = ccxt.TransformOrder(&orders[i])
 		}
 
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"orders": result,
-			"total":  total,
-			"page":   page,
-			"size":   pageSize,
-		})
+		// CCXT 标准格式：直接返回订单数组（分页信息可选）
+		return c.JSON(http.StatusOK, result)
 	}
 }
 

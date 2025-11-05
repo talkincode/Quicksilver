@@ -2,54 +2,57 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def show_home_page(api):
     """显示首页：数据概览 + 实时行情 + 权益曲线"""
 
-    tab1, tab2, tab3 = st.tabs(["## 概览与行情", "## 权益分析", "## 系统监控"])
+    tab1, tab2, tab3 = st.tabs(["## 📊 概览与行情", "## 📈 数据分析", "## 🖥️ 系统监控"])
 
     with tab1:
         # ============================================================================
         # 快速统计
         # ============================================================================
         st.subheader("🚀 快速统计")
-        try:
-            users_result = api.get_users(page=1, limit=1)
-            total_users = users_result.get("total", 0)
 
-            col1, col2, col3, col4 = st.columns(4)
+        # 使用加载状态
+        with st.spinner("正在加载统计数据..."):
+            try:
+                users_result = api.get_users(page=1, limit=1)
+                total_users = users_result.get("total", 0)
 
-            with col1:
-                st.metric("👥 用户总数", total_users)
-            with col2:
-                st.metric("📈 交易对", "2")
-            with col3:
-                # 尝试获取订单统计
-                try:
-                    orders = api.get_orders()
-                    if isinstance(orders, list):
-                        order_count = len(orders)
-                        st.metric("📝 订单总数", order_count)
-                    else:
+                col1, col2, col3, col4 = st.columns(4)
+
+                with col1:
+                    st.metric("👥 用户总数", total_users)
+                with col2:
+                    st.metric("📈 交易对", "2")
+                with col3:
+                    # 尝试获取订单统计
+                    try:
+                        orders = api.get_orders()
+                        if isinstance(orders, list):
+                            order_count = len(orders)
+                            st.metric("📝 订单总数", order_count)
+                        else:
+                            st.metric("📝 订单总数", "N/A")
+                    except:
                         st.metric("📝 订单总数", "N/A")
-                except:
-                    st.metric("📝 订单总数", "N/A")
-            with col4:
-                # 尝试获取成交统计
-                try:
-                    trades = api.get_my_trades()
-                    if isinstance(trades, list):
-                        trade_count = len(trades)
-                        st.metric("💰 成交总数", trade_count)
-                    else:
+                with col4:
+                    # 尝试获取成交统计
+                    try:
+                        trades = api.get_my_trades()
+                        if isinstance(trades, list):
+                            trade_count = len(trades)
+                            st.metric("💰 成交总数", trade_count)
+                        else:
+                            st.metric("💰 成交总数", "N/A")
+                    except:
                         st.metric("💰 成交总数", "N/A")
-                except:
-                    st.metric("💰 成交总数", "N/A")
 
-        except Exception as e:
-            st.error(f"❌ 加载统计数据失败: {str(e)}")
+            except Exception as e:
+                st.error(f"❌ 加载统计数据失败: {str(e)}")
 
         # ============================================================================
         # 实时行情
@@ -83,21 +86,139 @@ def show_home_page(api):
 
     with tab2:
         # ============================================================================
-        # 用户权益曲线（模拟数据）
+        # 数据分析与可视化
         # ============================================================================
-        st.subheader("📈 用户权益曲线")
+        st.subheader("📈 数据分析")
 
-        # TODO: 从 API 获取真实数据
+        # 用户权益曲线
+        st.markdown("### 💰 用户权益趋势")
+
         dates = pd.date_range(end=datetime.now(), periods=30, freq="D")
         equity = pd.DataFrame(
             {"日期": dates, "权益": [10000 + i * 100 + (i % 5) * 50 for i in range(30)]}
         )
 
-        st.line_chart(equity.set_index("日期"))
+        st.line_chart(equity.set_index("日期"), height=300)
         st.caption("⚠️ 当前为模拟数据，待实现真实权益统计")
 
         st.markdown("---")
-        st.write("待添加更多分析图表...")
+
+        # 余额分布分析
+        st.markdown("### 💎 资产分布")
+
+        try:
+            with st.spinner("正在加载余额数据..."):
+                balances = api.get_all_balances(page=1, limit=1000)
+                balance_data = balances.get("data", [])
+
+                if balance_data and isinstance(balance_data, list):
+                    # 统计各资产类型
+                    asset_stats = {}
+                    for bal in balance_data:
+                        asset = bal.get("asset", "Unknown")
+                        available = bal.get("available", 0)
+                        locked = bal.get("locked", 0)
+                        total = available + locked
+
+                        if asset not in asset_stats:
+                            asset_stats[asset] = {"total": 0, "users": 0}
+                        asset_stats[asset]["total"] += total
+                        asset_stats[asset]["users"] += 1
+
+                    # 创建饼图数据
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.markdown("**各资产总量分布**")
+                        asset_df = pd.DataFrame(
+                            [
+                                {"资产": k, "总量": v["total"]}
+                                for k, v in asset_stats.items()
+                            ]
+                        )
+                        if not asset_df.empty:
+                            # 使用条形图替代饼图
+                            st.bar_chart(asset_df.set_index("资产")["总量"])
+                        else:
+                            st.info("暂无数据")
+
+                    with col2:
+                        st.markdown("**持仓用户分布**")
+                        user_df = pd.DataFrame(
+                            [
+                                {"资产": k, "用户数": v["users"]}
+                                for k, v in asset_stats.items()
+                            ]
+                        )
+                        if not user_df.empty:
+                            st.bar_chart(user_df.set_index("资产")["用户数"])
+                        else:
+                            st.info("暂无数据")
+
+                    # 详细统计表
+                    st.markdown("**详细统计**")
+                    stats_table = pd.DataFrame(
+                        [
+                            {
+                                "资产": k,
+                                "总量": f"{v['total']:.8f}",
+                                "持仓用户数": v["users"],
+                                "平均持仓": (
+                                    f"{v['total']/v['users']:.8f}"
+                                    if v["users"] > 0
+                                    else "0"
+                                ),
+                            }
+                            for k, v in asset_stats.items()
+                        ]
+                    )
+                    st.dataframe(stats_table, use_container_width=True, hide_index=True)
+                else:
+                    st.info("📭 暂无余额数据")
+        except Exception as e:
+            st.warning(f"⚠️ 加载余额分析失败: {str(e)}")
+
+        st.markdown("---")
+
+        # 订单统计
+        st.markdown("### 📝 订单活动分析")
+
+        try:
+            with st.spinner("正在加载订单数据..."):
+                orders = api.get_orders()
+
+                if isinstance(orders, list) and len(orders) > 0:
+                    # 统计订单状态
+                    status_count = {}
+                    side_count = {"buy": 0, "sell": 0}
+
+                    for order in orders:
+                        status = order.get("status", "unknown")
+                        side = order.get("side", "unknown")
+
+                        status_count[status] = status_count.get(status, 0) + 1
+                        if side in side_count:
+                            side_count[side] += 1
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.markdown("**订单状态分布**")
+                        status_df = pd.DataFrame(
+                            [{"状态": k, "数量": v} for k, v in status_count.items()]
+                        )
+                        st.bar_chart(status_df.set_index("状态")["数量"])
+
+                    with col2:
+                        st.markdown("**买卖方向分布**")
+                        side_df = pd.DataFrame(
+                            [{"方向": k, "数量": v} for k, v in side_count.items()]
+                        )
+                        st.bar_chart(side_df.set_index("方向")["数量"])
+                else:
+                    st.info("📭 暂无订单数据")
+        except Exception as e:
+            st.warning(f"⚠️ 加载订单分析失败: {str(e)}")
 
     with tab3:
         # ============================================================================
