@@ -7,7 +7,9 @@
       "Bash(go run:*)",
       "Bash(lsof:*)",
       "Bash(curl:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(go test:*)",
+      "Bash(CGO_ENABLED=1 go test:*)"
     ],
     "deny": [],
     "ask": []
