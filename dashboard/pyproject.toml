@@ -1,0 +1,16 @@
+[project]
+name = "quicksilver-dashboard"
+version = "0.1.0"
+description = "Quicksilver 模拟交易所管理后台"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.3.3",
+    "python-dotenv>=1.2.1",
+    "requests>=2.32.5",
+    "streamlit>=1.51.0",
+]
+
+[tool.uv]
+dev-dependencies = []
+package = false  # 这是一个应用，不是可安装的包

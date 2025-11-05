@@ -48,3 +48,6 @@ temp/
 
 # Dependencies
 vendor/
+venv/
+.venv/
+dashboard/.venv
