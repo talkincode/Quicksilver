@@ -16,9 +16,22 @@ import (
 func NewDatabase(cfg *config.Config) (*gorm.DB, error) {
 	dsn := cfg.Database.GetDSN()
 
+	// 根据应用日志级别配置 GORM 日志级别
+	var logLevel logger.LogLevel
+	switch cfg.Logging.Level {
+	case "debug":
+		logLevel = logger.Info // Debug 模式显示所有 SQL
+	case "info":
+		logLevel = logger.Warn // Info 模式只显示慢查询和错误
+	case "warn", "error":
+		logLevel = logger.Error // Warn/Error 模式只显示错误
+	default:
+		logLevel = logger.Silent // 其他情况静默
+	}
+
 	// 配置 GORM
 	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logLevel),
 	}
 
 	db, err := gorm.Open(postgres.Open(dsn), gormConfig)

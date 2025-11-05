@@ -57,9 +57,13 @@ func main() {
 	// 创建 Echo 实例
 	e := echo.New()
 	e.HideBanner = true
+	e.HidePort = true // 隐藏端口信息
 
 	// 中间件
-	e.Use(middleware.Logger())
+	// 仅在 debug 模式下启用详细日志
+	if cfg.Server.Mode == "debug" {
+		e.Use(middleware.Logger())
+	}
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 

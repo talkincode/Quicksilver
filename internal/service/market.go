@@ -63,7 +63,7 @@ type HyperliquidAllMidsResponse map[string]string
 
 // UpdateTickers 更新行情数据
 func (s *MarketService) UpdateTickers() error {
-	s.logger.Info("UpdateTickers called", zap.String("source", s.cfg.Market.DataSource))
+	s.logger.Debug("UpdateTickers called", zap.String("source", s.cfg.Market.DataSource))
 
 	switch s.cfg.Market.DataSource {
 	case "hyperliquid":
@@ -77,7 +77,7 @@ func (s *MarketService) UpdateTickers() error {
 
 // updateHyperliquidTickers 从 Hyperliquid 更新行情
 func (s *MarketService) updateHyperliquidTickers() error {
-	s.logger.Info("updateHyperliquidTickers called")
+	s.logger.Debug("updateHyperliquidTickers called")
 
 	// Hyperliquid API 请求体
 	requestBody := map[string]interface{}{
@@ -91,7 +91,7 @@ func (s *MarketService) updateHyperliquidTickers() error {
 
 	// 发送请求
 	url := s.cfg.Market.APIURL + s.cfg.Market.Hyperliquid.InfoEndpoint
-	s.logger.Info("Requesting Hyperliquid API", zap.String("url", url))
+	s.logger.Debug("Requesting Hyperliquid API", zap.String("url", url))
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonData))
 	if err != nil {
@@ -119,15 +119,8 @@ func (s *MarketService) updateHyperliquidTickers() error {
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// 记录原始响应（前500字符）
-	preview := string(bodyBytes)
-	if len(preview) > 500 {
-		preview = preview[:500]
-	}
-	s.logger.Info("Raw API response",
-		zap.Int("body_length", len(bodyBytes)),
-		zap.String("body_preview", preview),
-	)
+	// 仅在 Debug 级别记录原始响应
+	s.logger.Debug("Raw API response", zap.Int("body_length", len(bodyBytes)))
 
 	// 解析响应
 	var midsResp HyperliquidAllMidsResponse
@@ -139,11 +132,12 @@ func (s *MarketService) updateHyperliquidTickers() error {
 		return fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	s.logger.Info("Received Hyperliquid data",
+	s.logger.Debug("Received Hyperliquid data",
 		zap.Int("mids_count", len(midsResp)),
 	)
 
 	// 更新数据库
+	updatedCount := 0
 	for _, symbol := range s.cfg.Market.Symbols {
 		// 转换交易对格式: BTC/USDT -> BTC
 		coin := convertSymbolToCoin(symbol)
@@ -176,11 +170,20 @@ func (s *MarketService) updateHyperliquidTickers() error {
 				continue
 			}
 
+			updatedCount++
 			s.logger.Debug("Ticker updated",
 				zap.String("symbol", symbol),
 				zap.Float64("price", price),
 			)
 		}
+	}
+
+	// 仅在 Info 级别输出汇总信息
+	if updatedCount > 0 {
+		s.logger.Info("Tickers updated successfully",
+			zap.Int("count", updatedCount),
+			zap.String("source", "hyperliquid"),
+		)
 	}
 
 	return nil

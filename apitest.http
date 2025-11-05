@@ -14,8 +14,8 @@
 ###############################################################################
 
 @baseUrl = http://localhost:8080
-@apiKey = your-api-key-here
-@apiSecret = your-api-secret-here
+@apiKey = qs-test-api-key-2024
+@apiSecret = qs-test-api-secret-change-in-production
 
 ###############################################################################
 # 1. 健康检查和基础接口

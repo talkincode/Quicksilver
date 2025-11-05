@@ -135,6 +135,25 @@ db-seed: ## 填充测试数据
 	@echo "Seeding database..."
 	$(GOCMD) run scripts/seed.go
 
+db-seed-test-user: ## 创建测试用户和初始余额
+	@echo "Creating test user for API testing..."
+	@which psql > /dev/null || (echo "Error: psql not found. Please install PostgreSQL client." && exit 1)
+	@psql -h localhost -U postgres -d quicksilver -f db/seed_test_user.sql
+	@echo ""
+	@echo "✅ Test user created successfully!"
+	@echo "Use these credentials in apitest.http:"
+	@echo "  API Key: qs-test-api-key-2024"
+	@echo "  API Secret: qs-test-api-secret-change-in-production"
+
+db-seed-test-user-docker: ## 在 Docker 容器中创建测试用户
+	@echo "Creating test user in Docker container..."
+	@docker exec -i quicksilver-postgres psql -U postgres -d quicksilver < db/seed_test_user.sql
+	@echo ""
+	@echo "✅ Test user created successfully in Docker!"
+	@echo "Use these credentials in apitest.http:"
+	@echo "  API Key: qs-test-api-key-2024"
+	@echo "  API Secret: qs-test-api-secret-change-in-production"
+
 db-reset: ## 重置数据库（危险操作！）
 	@echo "WARNING: This will drop all tables!"
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
