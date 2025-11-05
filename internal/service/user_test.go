@@ -38,7 +38,7 @@ func TestCreateUser(t *testing.T) {
 		}
 
 		// When
-		user, err := userService.CreateUser(req)
+		user, _, err := userService.CreateUser(req)
 
 		// Then: 用户创建成功
 		require.NoError(t, err)
@@ -63,11 +63,11 @@ func TestCreateUser(t *testing.T) {
 
 		// 先创建一个用户
 		req := CreateUserRequest{Email: "duplicate@example.com"}
-		_, err := userService.CreateUser(req)
+		_, _, err := userService.CreateUser(req)
 		require.NoError(t, err)
 
 		// When: 尝试用相同邮箱创建用户
-		_, err = userService.CreateUser(req)
+		_, _, err = userService.CreateUser(req)
 
 		// Then: 应该返回错误
 		require.Error(t, err)
@@ -84,7 +84,7 @@ func TestCreateUser(t *testing.T) {
 		req := CreateUserRequest{Email: "invalid-email"}
 
 		// When
-		_, err := userService.CreateUser(req)
+		_, _, err := userService.CreateUser(req)
 
 		// Then
 		require.Error(t, err)
@@ -101,7 +101,7 @@ func TestCreateUser(t *testing.T) {
 		req := CreateUserRequest{Email: ""}
 
 		// When
-		_, err := userService.CreateUser(req)
+		_, _, err := userService.CreateUser(req)
 
 		// Then
 		require.Error(t, err)
@@ -118,7 +118,7 @@ func TestGetUserByID(t *testing.T) {
 		userService := NewUserService(db, cfg, logger)
 
 		// 创建用户
-		createdUser, err := userService.CreateUser(CreateUserRequest{
+		createdUser, _, err := userService.CreateUser(CreateUserRequest{
 			Email: "getuser@example.com",
 		})
 		require.NoError(t, err)
@@ -158,7 +158,7 @@ func TestGetUserByAPIKey(t *testing.T) {
 		logger := testutil.NewTestLogger()
 		userService := NewUserService(db, cfg, logger)
 
-		createdUser, err := userService.CreateUser(CreateUserRequest{
+		createdUser, _, err := userService.CreateUser(CreateUserRequest{
 			Email: "apikey@example.com",
 		})
 		require.NoError(t, err)
@@ -198,7 +198,7 @@ func TestRegenerateAPIKey(t *testing.T) {
 		logger := testutil.NewTestLogger()
 		userService := NewUserService(db, cfg, logger)
 
-		user, err := userService.CreateUser(CreateUserRequest{
+		user, _, err := userService.CreateUser(CreateUserRequest{
 			Email: "regenerate@example.com",
 		})
 		require.NoError(t, err)
@@ -207,7 +207,7 @@ func TestRegenerateAPIKey(t *testing.T) {
 		oldAPISecret := user.APISecret
 
 		// When
-		newUser, err := userService.RegenerateAPIKey(user.ID)
+		newUser, _, err := userService.RegenerateAPIKey(user.ID)
 
 		// Then
 		require.NoError(t, err)
@@ -226,7 +226,7 @@ func TestRegenerateAPIKey(t *testing.T) {
 		userService := NewUserService(db, cfg, logger)
 
 		// When
-		_, err := userService.RegenerateAPIKey(99999)
+		_, _, err := userService.RegenerateAPIKey(99999)
 
 		// Then
 		require.Error(t, err)
@@ -242,7 +242,7 @@ func TestUpdateUserStatus(t *testing.T) {
 		logger := testutil.NewTestLogger()
 		userService := NewUserService(db, cfg, logger)
 
-		user, err := userService.CreateUser(CreateUserRequest{
+		user, _, err := userService.CreateUser(CreateUserRequest{
 			Email: "status@example.com",
 		})
 		require.NoError(t, err)
@@ -266,7 +266,7 @@ func TestUpdateUserStatus(t *testing.T) {
 		logger := testutil.NewTestLogger()
 		userService := NewUserService(db, cfg, logger)
 
-		user, err := userService.CreateUser(CreateUserRequest{
+		user, _, err := userService.CreateUser(CreateUserRequest{
 			Email: "suspend@example.com",
 		})
 		require.NoError(t, err)
@@ -286,7 +286,7 @@ func TestUpdateUserStatus(t *testing.T) {
 		logger := testutil.NewTestLogger()
 		userService := NewUserService(db, cfg, logger)
 
-		user, err := userService.CreateUser(CreateUserRequest{
+		user, _, err := userService.CreateUser(CreateUserRequest{
 			Email: "invalidstatus@example.com",
 		})
 		require.NoError(t, err)

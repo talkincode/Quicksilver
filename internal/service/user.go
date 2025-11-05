@@ -35,26 +35,26 @@ func NewUserService(db *gorm.DB, cfg *config.Config, logger *zap.Logger) *UserSe
 }
 
 // CreateUser 创建新用户
-func (s *UserService) CreateUser(req CreateUserRequest) (*model.User, error) {
+func (s *UserService) CreateUser(req CreateUserRequest) (*model.User, string, error) {
 	// 1. 参数验证
 	if req.Email == "" {
-		return nil, fmt.Errorf("email is required")
+		return nil, "", fmt.Errorf("email is required")
 	}
 
 	if !isValidEmail(req.Email) {
-		return nil, fmt.Errorf("invalid email format")
+		return nil, "", fmt.Errorf("invalid email format")
 	}
 
 	// 2. 检查邮箱是否已存在
 	var existingUser model.User
 	if err := s.db.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
-		return nil, fmt.Errorf("email already exists")
+		return nil, "", fmt.Errorf("email already exists")
 	}
 
 	// 3. 生成 API 凭证
 	apiKey, apiSecret, err := s.generateAPICredentials()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate API credentials: %w", err)
+		return nil, "", fmt.Errorf("failed to generate API credentials: %w", err)
 	}
 
 	// 4. 创建用户
@@ -70,7 +70,7 @@ func (s *UserService) CreateUser(req CreateUserRequest) (*model.User, error) {
 			zap.String("email", req.Email),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		return nil, "", fmt.Errorf("failed to create user: %w", err)
 	}
 
 	s.logger.Info("User created successfully",
@@ -78,7 +78,7 @@ func (s *UserService) CreateUser(req CreateUserRequest) (*model.User, error) {
 		zap.String("email", user.Email),
 	)
 
-	return user, nil
+	return user, apiSecret, nil
 }
 
 // GetUserByID 根据 ID 获取用户
@@ -107,18 +107,49 @@ func (s *UserService) GetUserByAPIKey(apiKey string) (*model.User, error) {
 	return &user, nil
 }
 
+// ListUsers 获取用户列表（支持分页和搜索）
+func (s *UserService) ListUsers(page, limit int, search, status string) ([]model.User, int64, error) {
+	var users []model.User
+	var total int64
+
+	query := s.db.Model(&model.User{})
+
+	// 搜索条件
+	if search != "" {
+		query = query.Where("email LIKE ? OR api_key LIKE ?", "%"+search+"%", "%"+search+"%")
+	}
+
+	// 状态过滤
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	// 计算总数
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count users: %w", err)
+	}
+
+	// 分页查询
+	offset := (page - 1) * limit
+	if err := query.Offset(offset).Limit(limit).Order("created_at DESC").Find(&users).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
+	}
+
+	return users, total, nil
+}
+
 // RegenerateAPIKey 重新生成用户的 API Key 和 Secret
-func (s *UserService) RegenerateAPIKey(userID uint) (*model.User, error) {
+func (s *UserService) RegenerateAPIKey(userID uint) (*model.User, string, error) {
 	// 1. 获取用户
 	user, err := s.GetUserByID(userID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// 2. 生成新的凭证
 	apiKey, apiSecret, err := s.generateAPICredentials()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate API credentials: %w", err)
+		return nil, "", fmt.Errorf("failed to generate API credentials: %w", err)
 	}
 
 	// 3. 更新用户
@@ -130,14 +161,14 @@ func (s *UserService) RegenerateAPIKey(userID uint) (*model.User, error) {
 			zap.Uint("user_id", userID),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to regenerate API key: %w", err)
+		return nil, "", fmt.Errorf("failed to regenerate API key: %w", err)
 	}
 
 	s.logger.Info("API key regenerated",
 		zap.Uint("user_id", userID),
 	)
 
-	return user, nil
+	return user, apiSecret, nil
 }
 
 // UpdateUserStatus 更新用户状态

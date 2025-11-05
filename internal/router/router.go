@@ -16,6 +16,7 @@ func SetupRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config, logger *zap.Logg
 	// 初始化服务层
 	balanceService := service.NewBalanceService(db, cfg, logger)
 	orderService := service.NewOrderService(db, cfg, logger, balanceService)
+	userService := service.NewUserService(db, cfg, logger)
 
 	// 健康检查
 	e.GET("/health", func(c echo.Context) error {
@@ -46,5 +47,17 @@ func SetupRoutes(e *echo.Echo, db *gorm.DB, cfg *config.Config, logger *zap.Logg
 		private.GET("/orders", api.GetOrders(orderService))
 		private.GET("/orders/open", api.GetOpenOrders(orderService))
 		private.GET("/myTrades", api.GetMyTrades(db))
+	}
+
+	// 管理员接口（需要认证 + 管理员权限）
+	// TODO: 添加管理员权限验证中间件
+	admin := v1.Group("/admin")
+	admin.Use(middleware.Auth(db, cfg)) // 暂时使用普通认证，后续添加管理员验证
+	{
+		admin.POST("/users", api.AdminCreateUser(userService))
+		admin.GET("/users", api.AdminListUsers(userService))
+		admin.GET("/users/:id", api.AdminGetUser(userService))
+		admin.PUT("/users/:id", api.AdminUpdateUser(userService))
+		admin.DELETE("/users/:id", api.AdminDeleteUser(userService))
 	}
 }
