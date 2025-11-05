@@ -2,11 +2,275 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestLoadConfigFromFile 测试从真实配置文件加载
+func TestLoadConfigFromFile(t *testing.T) {
+	t.Run("Load from config directory", func(t *testing.T) {
+		// Given: config/config.yaml 存在
+		if _, err := os.Stat("../../config/config.yaml"); os.IsNotExist(err) {
+			t.Skip("config/config.yaml not found, skipping real config test")
+		}
+
+		// 临时切换到项目根目录
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+		os.Chdir("../..")
+
+		// When: 加载配置
+		cfg, err := Load()
+
+		// Then: 应该成功加载
+		require.NoError(t, err)
+		assert.NotNil(t, cfg)
+
+		// And: 验证基本字段
+		assert.Greater(t, cfg.Server.Port, 0, "Server port should be set")
+		assert.NotEmpty(t, cfg.Database.Host, "Database host should be set")
+		assert.NotEmpty(t, cfg.Market.DataSource, "Market data source should be set")
+	})
+
+	t.Run("Load from current directory", func(t *testing.T) {
+		// Given: 在当前目录创建临时配置文件
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "config.yaml")
+
+		configContent := `
+server:
+  port: 8888
+  mode: test
+  name: test-server
+  version: 1.0.0
+
+database:
+  host: localhost
+  port: 5432
+  name: testdb
+  user: testuser
+  password: testpass
+  sslmode: disable
+
+market:
+  update_interval: "2s"
+  data_source: "hyperliquid"
+  api_url: "https://api.test.com"
+  symbols:
+    - "BTC/USDT"
+
+trading:
+  default_fee_rate: 0.001
+  maker_fee_rate: 0.0005
+  taker_fee_rate: 0.001
+  min_order_amount: 0.0001
+
+auth:
+  jwt_secret: "test-secret"
+  token_expire: 3600
+
+logging:
+  level: "debug"
+  format: "console"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		// 临时切换到测试目录
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+		os.Chdir(tempDir)
+
+		// When: 加载配置
+		cfg, err := Load()
+
+		// Then: 应该成功加载
+		require.NoError(t, err)
+		assert.Equal(t, 8888, cfg.Server.Port)
+		assert.Equal(t, "test", cfg.Server.Mode)
+		assert.Equal(t, "localhost", cfg.Database.Host)
+	})
+}
+
+// TestLoadConfigError 测试配置加载错误场景
+func TestLoadConfigError(t *testing.T) {
+	t.Run("Config file not found", func(t *testing.T) {
+		// Given: 切换到空目录
+		tempDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+		os.Chdir(tempDir)
+
+		// When: 尝试加载配置
+		cfg, err := Load()
+
+		// Then: 应该返回错误
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
+		assert.Contains(t, err.Error(), "failed to read config file")
+	})
+
+	t.Run("Invalid YAML format", func(t *testing.T) {
+		// Given: 创建格式错误的配置文件
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "config.yaml")
+
+		invalidYAML := `
+server:
+  port: invalid_port  # 应该是数字
+  mode: test
+  [invalid syntax
+`
+		err := os.WriteFile(configPath, []byte(invalidYAML), 0644)
+		require.NoError(t, err)
+
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+		os.Chdir(tempDir)
+
+		// When: 尝试加载配置
+		cfg, err := Load()
+
+		// Then: 应该返回错误（可能是读取或解析错误）
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
+	})
+}
+
+// TestEnvironmentVariableOverride 测试环境变量覆盖
+func TestEnvironmentVariableOverride(t *testing.T) {
+	t.Run("Override server port", func(t *testing.T) {
+		// Given: 创建基础配置文件
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "config.yaml")
+
+		configContent := `
+server:
+  port: 8080
+  mode: debug
+database:
+  host: localhost
+  port: 5432
+market:
+  update_interval: "1s"
+  data_source: "test"
+trading:
+  default_fee_rate: 0.001
+auth:
+  jwt_secret: "secret"
+  token_expire: 3600
+logging:
+  level: "info"
+  format: "console"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		// 设置环境变量
+		os.Setenv("QS_SERVER_PORT", "9999")
+		defer os.Unsetenv("QS_SERVER_PORT")
+
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+		os.Chdir(tempDir)
+
+		// When: 加载配置
+		cfg, err := Load()
+
+		// Then: 环境变量应该覆盖配置文件
+		require.NoError(t, err)
+		assert.Equal(t, 9999, cfg.Server.Port, "Environment variable should override config file")
+	})
+
+	t.Run("Override database host", func(t *testing.T) {
+		// Given: 创建配置并设置环境变量
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "config.yaml")
+
+		configContent := `
+server:
+  port: 8080
+database:
+  host: localhost
+  port: 5432
+market:
+  update_interval: "1s"
+  data_source: "test"
+trading:
+  default_fee_rate: 0.001
+auth:
+  jwt_secret: "secret"
+  token_expire: 3600
+logging:
+  level: "info"
+  format: "console"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		os.Setenv("QS_DATABASE_HOST", "prod.example.com")
+		defer os.Unsetenv("QS_DATABASE_HOST")
+
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+		os.Chdir(tempDir)
+
+		// When: 加载配置
+		cfg, err := Load()
+
+		// Then: 环境变量应该覆盖
+		require.NoError(t, err)
+		assert.Equal(t, "prod.example.com", cfg.Database.Host)
+	})
+
+	t.Run("Override nested config", func(t *testing.T) {
+		// Given: 测试嵌套字段覆盖
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "config.yaml")
+
+		configContent := `
+server:
+  port: 8080
+database:
+  host: localhost
+  port: 5432
+market:
+  update_interval: "1s"
+  data_source: "hyperliquid"
+  api_url: "https://api.hyperliquid.xyz"
+  hyperliquid:
+    info_endpoint: "/info"
+trading:
+  default_fee_rate: 0.001
+auth:
+  jwt_secret: "secret"
+  token_expire: 3600
+logging:
+  level: "info"
+  format: "console"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		// 注意：Viper 环境变量用下划线替代点号
+		os.Setenv("QS_MARKET_API_URL", "https://override.api.com")
+		defer os.Unsetenv("QS_MARKET_API_URL")
+
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+		os.Chdir(tempDir)
+
+		// When: 加载配置
+		cfg, err := Load()
+
+		// Then: 嵌套配置应该被覆盖
+		require.NoError(t, err)
+		assert.Equal(t, "https://override.api.com", cfg.Market.APIURL)
+	})
+}
 
 func TestLoadConfig(t *testing.T) {
 	// 创建临时配置文件
